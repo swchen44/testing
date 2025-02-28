@@ -1,47 +1,9 @@
 import csv
 import os
 import re
-
-def scan_c_code(c_code_file, prompt_file, output_csv_file, ai_model):
-    """
-    Scans C source code for bugs and memory inefficiencies using AI's REST API,
-    reads the prompt from a file, and outputs a CSV file with the line number,
-    original code, and reason for the bug/inefficiency.
-    """
-    try:
-        # Read the C code from the file
-        with open(c_code_file, 'r') as f:
-            c_code = f.readlines()
-
-        # Read the prompt from the file
-        with open(prompt_file, 'r') as f:
-            prompt = f.read()
-
-        # Prepare the data for CSV output
-        output_data = []
-
-        # Iterate through each line of the C code
-        for line_number, line in enumerate(c_code, 1):
-            # Send the code to Google AI API and get the response
-            reason = get_ai_response(line, prompt, ai_model)
-
-            if reason:
-                # Append the data to the output list
-                output_data.append([line_number, line.strip(), reason])
-
-        # Write the output to a CSV file
-        write_csv(output_data, output_csv_file)
-
-        print(f"Successfully scanned {c_code_file} and generated {output_csv_file}")
-
-    except FileNotFoundError as e:
-        print(f"Error: File not found: {e}")
-    except Exception as e:
-        print(f"Error: An error occurred during the scanning process: {e}")
-
-
+import argparse
 import google.generativeai as genai
-import os
+import openai
 
 class AIModel:
     def __init__(self):
@@ -69,8 +31,6 @@ class GeminiAIModel(AIModel):
             print(f"Error: An error occurred during the API call: {e}")
             return None
 
-
-import openai
 
 class OpenAIModel(AIModel):
     def __init__(self):
@@ -124,12 +84,46 @@ def write_csv(data, output_csv_file):
         csvwriter.writerows(data)
 
 
-import argparse
+def scan_c_code(c_code_file, prompt_file, output_csv_file, ai_model):
+    """
+    Scans C source code for bugs and memory inefficiencies using AI's REST API,
+    reads the prompt from a file, and outputs a CSV file with the line number,
+    original code, and reason for the bug/inefficiency.
+    """
+    try:
+        # Read the C code from the file
+        with open(c_code_file, 'r') as f:
+            c_code = f.readlines()
+
+        # Read the prompt from the file
+        with open(prompt_file, 'r') as f:
+            prompt = f.read()
+
+        # Prepare the data for CSV output
+        output_data = []
+
+        # Send the entire C code to the AI API and get the response
+        reason = get_ai_response("".join(c_code), prompt, ai_model)
+
+        if reason:
+            # Append the data to the output list
+            output_data.append([1, "".join(c_code).strip(), reason])
+
+        # Write the output to a CSV file
+        write_csv(output_data, output_csv_file)
+
+        print(f"Successfully scanned {c_code_file} and generated {output_csv_file}")
+
+    except FileNotFoundError as e:
+        print(f"Error: File not found: {e}")
+    except Exception as e:
+        print(f"Error: An error occurred during the scanning process: {e}")
+
 
 if __name__ == '__main__':
     # Create argument parser
     parser = argparse.ArgumentParser(description="Scans C source code for bugs and memory inefficiencies using Google AI's REST API.")
-    parser.add_argument("c_code_file", nargs='?', default='example.c', help="Path to the C source code file")
+    parser.add_argument("c_code_file", nargs='?', default='defective.c', help="Path to the C source code file")
     parser.add_argument("prompt_file", nargs='?', default='prompt.txt', help="Path to the prompt file")
     parser.add_argument("output_csv_file", nargs='?', default='output.csv', help="Path to the output CSV file")
     parser.add_argument("--model", default="gemini", choices=["gemini", "openai"], help="Choose the AI model to use (gemini or openai)")
@@ -144,28 +138,24 @@ if __name__ == '__main__':
     ai_model_name = args.model
 
     # Create dummy files for testing if they don't exist
-    if not os.path.exists(c_code_file):
-        with open(c_code_file, 'w') as f:
-            f.write("int main() {\\n")
-            f.write("  int *ptr;\\n")
-            f.write("  *ptr = 10; // Potential memory issue\\n")
-            f.write("  return 0;\\n")
-            f.write("}\\n")
+    #if not os.path.exists(c_code_file):
+    #    with open(c_code_file, 'w') as f:
+    #        f.write("int main() {\\n")
+    #        f.write("  int *ptr;\\n")
+    #        f.write("  *ptr = 10; // Potential memory issue\\n")
+    #        f.write("  return 0;\\n")
+    #        f.write("}\\n")
 
     if not os.path.exists(prompt_file):
         with open(prompt_file, 'w') as f:
             f.write("Analyze the following C code line for potential bugs and memory inefficiencies. Provide a brief reason if any issues are found.\\n")
 
-    api_key = os.environ.get("GOOGLE_API_KEY")
-    if not api_key:
-        print("Error: GOOGLE_API_KEY environment variable not set.")
+    if ai_model_name == "gemini":
+        ai_model = GeminiAIModel()
+    elif ai_model_name == "openai":
+        ai_model = OpenAIModel()
     else:
-        if ai_model_name == "gemini":
-            ai_model = GeminiAIModel()
-        elif ai_model_name == "openai":
-            ai_model = OpenAIModel()
-        else:
-            print("Error: Invalid AI model name.")
-            exit()
+        print("Error: Invalid AI model name.")
+        exit()
 
-        scan_c_code(c_code_file, prompt_file, output_csv_file, ai_model)
+    scan_c_code(c_code_file, prompt_file, output_csv_file, ai_model)
