@@ -1,3 +1,5 @@
+# Here is a testing repo, playground repo
+
 # C Code Scanner
 
 This project provides a Python script to scan C source code for potential bugs and memory inefficiencies using AI models.
