@@ -1,0 +1,1 @@
+int main() {\n  int *ptr;\n  *ptr = 10; // Potential memory issue\n  return 0;\n}\n
