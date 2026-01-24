@@ -1,0 +1,31 @@
+# Enterprise Agent Skill Testing Framework
+# Python依赖
+
+# 核心依赖
+dataclasses>=0.6; python_version < '3.7'
+typing>=3.7.4; python_version < '3.5'
+
+# 测试和质量保障
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-timeout>=2.1.0
+pytest-mock>=3.10.0
+
+# 性能和监控
+psutil>=5.9.0
+
+# JSON处理
+jsonschema>=4.0.0
+
+# 可选：报告生成
+jinja2>=3.0.0
+markdown>=3.4.0
+
+# 可选：可视化
+matplotlib>=3.5.0
+seaborn>=0.12.0
+
+# 开发工具
+black>=22.0.0
+flake8>=5.0.0
+mypy>=0.990
