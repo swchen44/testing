@@ -160,6 +160,7 @@ class PDFToMarkdown:
 
         print(f"\n[*] 完成，共 {total} 頁")
         full_md = "\n\n---\n\n".join(filter(None, md_pages))
+        self.output_path.parent.mkdir(parents=True, exist_ok=True)
         self.output_path.write_text(full_md, encoding="utf-8")
         print(f"[*] 已儲存至：{self.output_path}")
         return full_md
