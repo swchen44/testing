@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "pdfplumber>=0.10.0",
+#   "pymupdf>=1.23.0",
+#   "pillow>=10.0.0",
+# ]
+# ///
 """
 PDF to Markdown Converter
 =========================
@@ -7,11 +15,11 @@ PDF to Markdown Converter
 主要使用的函式庫：
   - pdfplumber  : 高精度表格擷取
   - pymupdf     : 圖片擷取與文字解析
-  - camelot     : 複雜表格（需 ghostscript）
+  - camelot     : 複雜表格（需 ghostscript，選裝）
   - Pillow      : 圖片處理
 
-安裝：
-  pip install pdfplumber pymupdf pillow camelot-py[cv] ghostscript
+以 uv 直接執行（免手動安裝）：
+  uv run pdf_to_markdown.py report.pdf
 """
 
 import argparse
@@ -88,7 +96,7 @@ def extract_images_from_page(page, output_dir: Path, page_num: int) -> list[str]
         xref = img_info[0]
         try:
             base_image = page.parent.extract_image(xref)
-        except Exception:
+        except (ValueError, KeyError):  # fitz raises these on corrupt/unsupported images
             continue
 
         img_bytes = base_image["image"]
@@ -226,7 +234,7 @@ class PDFToMarkdown:
                     results.append(table_to_markdown(rows))
                 if results:
                     break
-        except Exception as e:
+        except (OSError, RuntimeError, ValueError) as e:  # camelot raises various errors
             print(f"\n[!] camelot 擷取失敗（頁 {page_num}）：{e}")
         return results
 
@@ -288,14 +296,14 @@ class PDFToMarkdown:
             return self._extract_images_base64(fitz_page, page_num)
         return extract_images_from_page(fitz_page, self.image_dir, page_num)
 
-    def _extract_images_base64(self, fitz_page, page_num: int) -> list[str]:
+    def _extract_images_base64(self, fitz_page, _page_num: int) -> list[str]:
         """將圖片轉為 base64 inline 嵌入。"""
         md_images = []
         for img_index, img_info in enumerate(fitz_page.get_images(full=True)):
             xref = img_info[0]
             try:
                 base_image = fitz_page.parent.extract_image(xref)
-            except Exception:
+            except (ValueError, KeyError):  # fitz raises these on corrupt/unsupported images
                 continue
             img_bytes = base_image["image"]
             ext = base_image.get("ext", "png")
@@ -309,6 +317,7 @@ class PDFToMarkdown:
 # ---------------------------------------------------------------------------
 
 def main():
+    """CLI 進入點：解析參數並執行 PDF → Markdown 轉換。"""
     parser = argparse.ArgumentParser(
         description="PDF 轉 Markdown（表格 + 圖片）",
         formatter_class=argparse.RawDescriptionHelpFormatter,

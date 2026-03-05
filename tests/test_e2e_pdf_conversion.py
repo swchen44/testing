@@ -12,15 +12,13 @@ E2E 測試：pdf_to_markdown.py 的完整轉換流程
 """
 
 import re
-import shutil
-import tempfile
 from pathlib import Path
 
 import pytest
 
 # 嘗試在有/無 pdfplumber & fitz 的環境下均能 import
 try:
-    from pdf_to_markdown import PDFToMarkdown, table_to_markdown
+    from pdf_to_markdown import PDFToMarkdown
     CONVERTER_AVAILABLE = True
 except ImportError:
     CONVERTER_AVAILABLE = False
@@ -36,7 +34,8 @@ FIXTURE_PDF = Path(__file__).parent / "fixtures" / "sample_with_tables_and_image
 def ensure_fixture_pdf():
     """若 fixture PDF 不存在，自動呼叫 make_fixture_pdf.py 產生。"""
     if not FIXTURE_PDF.exists():
-        from tests.fixtures.make_fixture_pdf import make_pdf
+        # 延遲 import 避免在 collect 階段就強制安裝 fpdf2
+        from tests.fixtures.make_fixture_pdf import make_pdf  # pylint: disable=import-outside-toplevel
         make_pdf()
     assert FIXTURE_PDF.exists(), f"Fixture PDF 不存在：{FIXTURE_PDF}"
 
@@ -73,12 +72,14 @@ skip_if_no_converter = pytest.mark.skipif(
 
 @skip_if_no_converter
 class TestBasicConversion:
+    """驗證 PDF 能成功轉換為非空的合法 Markdown 檔案。"""
+
     def test_output_file_created(self, converter, tmp_output):
         """轉換後應產生 .md 檔案。"""
         converter.convert()
         assert (tmp_output / "output.md").exists()
 
-    def test_output_not_empty(self, converter, tmp_output):
+    def test_output_not_empty(self, converter):
         """輸出 Markdown 不得為空。"""
         md = converter.convert()
         assert len(md.strip()) > 100
@@ -105,6 +106,7 @@ class TestTableExtraction:
 
     @pytest.fixture(autouse=True)
     def run_conversion(self, converter):
+        """執行轉換並將結果存入 self.md 供各測試使用。"""
         self.md = converter.convert()
 
     # --- 格式驗證 ---
@@ -159,7 +161,6 @@ class TestTableExtraction:
 
     def test_at_least_three_tables_found(self):
         """全文應至少有 3 個獨立表格（含分隔行）。"""
-        # 計算含 | --- | 的行數，每張表格恰好 1 行
         sep_lines = [
             line for line in self.md.splitlines()
             if re.fullmatch(r"(\|[\s\-]+)+\|", line.strip())
@@ -177,6 +178,7 @@ class TestImageExtraction:
 
     @pytest.fixture(autouse=True)
     def run_conversion(self, converter, tmp_output):
+        """執行轉換並記錄圖片目錄位置。"""
         self.md = converter.convert()
         self.image_dir = tmp_output / "images"
 
@@ -205,6 +207,8 @@ class TestImageExtraction:
 
 @skip_if_no_converter
 class TestBase64ImageMode:
+    """驗證 embed_images=True 時圖片以 base64 data URI 嵌入。"""
+
     def test_embed_images_base64(self, tmp_output):
         """--embed-images 模式：圖片應以 data URI 嵌入 Markdown。"""
         conv = PDFToMarkdown(
@@ -223,6 +227,8 @@ class TestBase64ImageMode:
 
 @skip_if_no_converter
 class TestEdgeCases:
+    """驗證各種邊界情況下轉換器的穩健性。"""
+
     def test_empty_cells_do_not_crash(self, tmp_output):
         """含空欄位的表格（第 3 頁）不應導致例外。"""
         conv = PDFToMarkdown(
@@ -232,7 +238,7 @@ class TestEdgeCases:
         md = conv.convert()  # 不拋出例外即通過
         assert md
 
-    def test_file_not_found_raises(self, tmp_output):
+    def test_file_not_found_raises(self):
         """輸入不存在的 PDF 應拋出 FileNotFoundError。"""
         with pytest.raises(FileNotFoundError):
             PDFToMarkdown(pdf_path="nonexistent.pdf")

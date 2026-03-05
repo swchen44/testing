@@ -1,13 +1,20 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "fpdf2>=2.7.0",
+#   "pillow>=10.0.0",
+# ]
+# ///
 """
 產生測試用 PDF fixture：sample_with_tables_and_images.pdf
 
 內容：
   - 第 1 頁：標題文字 + 員工薪資表格 + 說明段落
-  - 第 2 頁：產品庫存表格 + 嵌入彩色圖片 (圓餅圖)
+  - 第 2 頁：產品庫存表格 + 嵌入彩色圖片 (長條圖)
   - 第 3 頁：多欄位統計表格（含 None / 空值邊界情況）
 
-執行：
-  python tests/fixtures/make_fixture_pdf.py
+以 uv 直接執行（免手動安裝）：
+  uv run tests/fixtures/make_fixture_pdf.py
 """
 
 from pathlib import Path
