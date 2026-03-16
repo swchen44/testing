@@ -1,3 +1,8 @@
+
+__pycache__/
+*.pyc
+*.pyo
+=======
 # Python
 __pycache__/
 *.py[cod]
@@ -43,3 +48,4 @@ Thumbs.db
 
 # Claude Code
 .claude/
+

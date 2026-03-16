@@ -1,0 +1,31 @@
+[MASTER]
+# 忽略 __pycache__ 與 fixture 產生的 PDF
+ignore=__pycache__
+ignore-patterns=.*\.pyc$
+
+[MESSAGES CONTROL]
+# 停用對 pytest 測試常見的誤報項目
+disable=
+    # pytest fixture 參數名稱慣例上與外層 fixture 同名
+    redefined-outer-name,
+    # pytest 測試類別通常只有 test_* 方法，無需額外 public method
+    too-few-public-methods,
+    # pytest fixture 以 autouse 設定 self.attr，非真正的 outside-init
+    attribute-defined-outside-init
+
+[FORMAT]
+max-line-length=100
+indent-string='    '
+
+[DESIGN]
+# 允許較多參數（PDF 轉換需要多個選項）
+max-args=8
+max-positional-arguments=8
+max-locals=18
+
+[TYPECHECK]
+# 忽略 pdfplumber / fitz 動態屬性（C extension）
+ignored-modules=fitz,pdfplumber
+
+[SIMILARITIES]
+min-similarity-lines=6

@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          uv pip install --system \
+            pdfplumber pymupdf pillow fpdf2 \
+            pytest pylint
+
+      - name: Pylint
+        run: |
+          pylint pdf_to_markdown.py \
+                 tests/test_e2e_pdf_conversion.py \
+                 test_pdf_to_markdown.py
+
+      - name: Tests
+        run: |
+          python -m pytest test_pdf_to_markdown.py \
+                           tests/test_e2e_pdf_conversion.py \
+                           -v --tb=short

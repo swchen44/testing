@@ -1,0 +1,17 @@
+# PDF 轉 Markdown 所需套件
+# 安裝方式：pip install -r requirements_pdf.txt
+
+# 核心套件（必裝）
+pdfplumber>=0.10.0        # 高精度表格偵測與擷取
+pymupdf>=1.23.0           # 文字 & 圖片擷取（import fitz）
+Pillow>=10.0.0            # 圖片處理
+
+# 進階表格（選裝，需要 ghostscript）
+# camelot-py[cv]>=0.11.0  # 處理複雜/格線型表格
+# ghostscript               # camelot 依賴
+
+# 如需使用 marker（最高精度，支援 GPU）
+# marker-pdf>=0.3.0
+
+# 如需使用 docling（IBM，支援 OCR）
+# docling>=2.0.0
