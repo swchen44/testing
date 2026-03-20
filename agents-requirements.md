@@ -1,6 +1,6 @@
 # Multi-Agent Workflow System — 需求書
 
-**文件版本**：v1.0
+**文件版本**：v1.1
 **狀態**：Draft
 **目標讀者**：架構師、開發者、產品負責人
 
@@ -24,7 +24,8 @@
 2. 代理之間透過結構化交接文件傳遞上下文，避免 Context 爆炸
 3. 技能（Skill）可跨代理共用，避免重複定義
 4. 交接紀錄透過 Git 保存，支援後台統計與稽核
-5. 未來可平滑遷移至 ADK / SDK 自動化執行
+5. 未來可平滑遷移至 OpenClaw，充分利用其 Gateway、Skills、Hooks 原生能力
+6. OpenClaw 之後可再遷移至 ADK / SDK 實現全自動化
 
 ---
 
@@ -212,7 +213,8 @@ graph LR
     Hooks --> Handoffs
     Handoffs --> Git
     ClaudeCode --> FA
-    Handoffs -.->|未來遷移| Future
+    Handoffs -.->|Phase 2 遷移| OpenClaw
+    OpenClaw -.->|Phase 3 遷移| Future
 ```
 
 ---
@@ -230,3 +232,73 @@ graph LR
 | Handoff Document | 交接時產生的壓縮摘要文件，存於 `memory/handoffs/` |
 | run-id | 每次工作流程執行的唯一識別碼（timestamp-based） |
 | Context 爆炸 | 對話 token 累積過多導致 Claude 無法有效運作的現象 |
+| OpenClaw | 基於 pi-mono 的開源個人 AI 助手，具備 Gateway、Hooks、Skills、Memory 原生能力 |
+| pi-mono | OpenClaw 的底層框架，四個核心工具（read/write/edit/bash）的極簡架構 |
+| Gateway | OpenClaw 的核心守護進程，提供 WebSocket API 與多渠道（14+）整合 |
+| ClaWHub | OpenClaw 的 Skill 與 Hook 市集，類似 npm registry |
+
+---
+
+## 9. 遷移需求（OpenClaw）
+
+### 9.1 遷移目標
+
+將現有 Claude Code 多代理系統遷移至 OpenClaw，利用其原生能力取代自建機制：
+
+| 現有機制（自建） | OpenClaw 原生能力 | 效益 |
+|----------------|-----------------|------|
+| `.claude/skills/` + symlink | `~/.openclaw/skills/`（全域）+ `workspace/skills/`（工作區） | 無需手動 symlink，平台原生支援 |
+| `scripts/hooks/*.sh`（bash） | `workspace/hooks/{name}/handler.ts`（TypeScript） | 類型安全、支援 RPC 回調 |
+| `memory/shared/` | `workspace/MEMORY.md` + daily logs + LanceDB | 原生混合向量搜尋（70% Vector + 30% BM25） |
+| `agents/registry.json` | `~/.openclaw/openclaw.json` agents 陣列 | 統一設定、原生 CLI 管理 |
+| `install-agent.sh` | `openclaw install` / ClaWHub 安裝 | 生態系統整合 |
+| `memory/handoffs/`（自建） | 自訂 Skill + `workspace/memory/` | 需設計 OpenClaw-native 交接機制 |
+
+### 9.2 遷移功能需求
+
+| 編號 | 需求 | 優先級 |
+|------|------|--------|
+| FR-MIG-01 | 現有 SKILL.md 格式須相容 OpenClaw SKILL.md frontmatter 規範 | Must |
+| FR-MIG-02 | 現有交接文件（handoff）機制以 OpenClaw Skill 形式重新實作 | Must |
+| FR-MIG-03 | bash Hooks 轉換為 TypeScript `handler.ts`，事件對應 OpenClaw event schema | Must |
+| FR-MIG-04 | `memory/shared/` 內容可匯入 `workspace/MEMORY.md` 與 LanceDB | Should |
+| FR-MIG-05 | 每個 Agent 對應 OpenClaw 的一個 Workspace 設定 | Must |
+| FR-MIG-06 | `openclaw.json` 取代 `registry.json` 與 `agent-config.json` | Must |
+| FR-MIG-07 | 交接統計資料仍透過 Git 保存，確保稽核性不中斷 | Must |
+| FR-MIG-08 | 支援多渠道觸發（如飛書 / Telegram），讓使用者透過 IM 操作工作流 | Could |
+
+### 9.3 遷移三階段
+
+```mermaid
+flowchart LR
+    subgraph Phase1["Phase 1：Claude Code（現在）"]
+        P1A[手動安裝\ninstall-agent.sh]
+        P1B[bash Hooks]
+        P1C[symlink Skills]
+        P1D[memory/shared/]
+    end
+
+    subgraph Phase2["Phase 2：OpenClaw（遷移目標）"]
+        P2A[openclaw install\nClaWHub]
+        P2B[TypeScript Hooks\nhandler.ts]
+        P2C[~/.openclaw/skills/\nworkspace/skills/]
+        P2D[MEMORY.md\n+ LanceDB]
+        P2E[Gateway\n多渠道 IM 觸發]
+    end
+
+    subgraph Phase3["Phase 3：ADK/SDK（全自動）"]
+        P3A[AgentDefinition\n自動安裝]
+        P3B[PostToolUse callback]
+        P3C[system_prompt\n知識注入]
+        P3D[output_format\nJSON 交接]
+    end
+
+    P1A -->|Script → CLI| P2A
+    P1B -->|bash → TypeScript| P2B
+    P1C -->|symlink → 原生層級| P2C
+    P1D -->|Markdown → LanceDB| P2D
+    P2A -->|CLI → SDK| P3A
+    P2B -->|hook → callback| P3B
+    P2C -->|SKILL.md → prompt| P3C
+    P2D -->|memory → JSON| P3D
+```

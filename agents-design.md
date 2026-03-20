@@ -1,8 +1,8 @@
 # Multi-Agent Workflow System — 設計書
 
-**文件版本**：v1.0
+**文件版本**：v1.1
 **狀態**：Draft
-**依據**：agents-requirements.md v1.0
+**依據**：agents-requirements.md v1.1
 
 ---
 
@@ -673,45 +673,335 @@ flowchart LR
 
 ---
 
-## 10. 未來遷移路徑
+## 10. 遷移至 OpenClaw
 
-### 10.1 Claude Code → ADK/SDK 對應
+### 10.1 OpenClaw 目錄結構對應
 
-| Claude Code 元件 | ADK/SDK 對應 |
-|-----------------|-------------|
-| `SOUL.md` + `DUTIES.md` | `AgentDefinition(description=..., prompt=...)` |
-| `.claude/skills/` | `system_prompt` 中的知識注入 |
-| `memory/handoffs/*.md` | 結構化 `output_format` JSON |
-| Hooks（`on-agent-stop`） | `PostToolUse` callback |
-| `run-agent.sh` | `query(prompt=..., options=ClaudeAgentOptions(resume=session_id))` |
-| `agent-config.json` | `ClaudeAgentOptions` 參數 |
+```
+~/.openclaw/
+├── openclaw.json                    ← 取代 registry.json + agent-config.json
+├── workspace/                       ← 預設工作區（對應現有 project-root/）
+│   ├── SOUL.md                      ← 直接對應，格式相容
+│   ├── IDENTITY.md                  ← 新增：Agent 對外公開的身份卡
+│   ├── AGENTS.md                    ← 取代 DUTIES.md（規則 + 交接程序寫在此）
+│   ├── USER.md                      ← 新增：使用者偏好設定
+│   ├── TOOLS.md                     ← 新增：本地工具設定（SSH、相機、語音）
+│   ├── HEARTBEAT.md                 ← 新增：排程任務定義
+│   ├── MEMORY.md                    ← 取代 memory/shared/（長期記憶）
+│   ├── memory/
+│   │   ├── YYYY-MM-DD.md            ← 取代 memory/agents/{name}/working.md
+│   │   └── lancedb/                 ← 新增：向量搜尋索引（混合檢索）
+│   ├── skills/                      ← 工作區層技能（取代 agents/{name}/skills/）
+│   │   ├── project-context/SKILL.md ← 直接遷移，frontmatter 加 openclaw metadata
+│   │   ├── git-operations/SKILL.md
+│   │   ├── build-systems/SKILL.md
+│   │   ├── handoff-protocol/SKILL.md
+│   │   └── {agent-private}/SKILL.md ← 私有技能直接放工作區
+│   └── hooks/
+│       └── handoff-commit/          ← 取代 scripts/hooks/on-agent-stop.sh
+│           ├── HOOK.md
+│           └── handler.ts           ← TypeScript，取代 bash script
+│
+├── skills/                          ← 全域技能（取代 .claude/skills/）
+│   └── {skill-name}/SKILL.md        ← 所有 workspace 共用，symlink 不再需要
+│
+└── agents/
+    └── {agent-id}/sessions/         ← Session 儲存
+```
 
-### 10.2 遷移時序
+### 10.2 元件對應關係
+
+```mermaid
+graph LR
+    subgraph 現有 Claude Code 設計
+        CC_SOUL[SOUL.md]
+        CC_DUTIES[DUTIES.md]
+        CC_SKILLS[.claude/skills/\n共用技能庫]
+        CC_SYMLINK[agents/.../skills/\nsymlink]
+        CC_MEM_S[memory/shared/]
+        CC_MEM_W[memory/agents/\nworking.md]
+        CC_MEM_H[memory/handoffs/]
+        CC_REG[registry.json]
+        CC_CFG[agent-config.json]
+        CC_HOOK[hooks/*.sh\nbash]
+        CC_INST[install-agent.sh]
+    end
+
+    subgraph OpenClaw 原生
+        OC_SOUL[workspace/SOUL.md]
+        OC_AGENTS[workspace/AGENTS.md]
+        OC_GSKILL[~/.openclaw/skills/\n全域技能]
+        OC_WSKILL[workspace/skills/\n工作區技能]
+        OC_MEMORY[workspace/MEMORY.md\n+ LanceDB]
+        OC_DAILY[memory/YYYY-MM-DD.md]
+        OC_HAND[自訂 handoff Skill\n+ memory/handoffs/]
+        OC_JSON[openclaw.json\nagents 陣列]
+        OC_HOOK[workspace/hooks/\nhandler.ts TypeScript]
+        OC_INST[openclaw install\nClaWHub]
+    end
+
+    CC_SOUL -->|直接對應| OC_SOUL
+    CC_DUTIES -->|整合| OC_AGENTS
+    CC_SKILLS -->|升級| OC_GSKILL
+    CC_SYMLINK -->|取代| OC_WSKILL
+    CC_MEM_S -->|整合| OC_MEMORY
+    CC_MEM_W -->|對應| OC_DAILY
+    CC_MEM_H -->|自訂實作| OC_HAND
+    CC_REG & CC_CFG -->|合併| OC_JSON
+    CC_HOOK -->|重寫| OC_HOOK
+    CC_INST -->|取代| OC_INST
+```
+
+### 10.3 SKILL.md 格式遷移
+
+**現有格式（Claude Code）**：
+```yaml
+---
+name: project-context
+description: 專案背景知識
+version: 1.0
+tags: [shared, required]
+scope: all
+---
+```
+
+**遷移後格式（OpenClaw 相容）**：
+```yaml
+---
+name: project-context
+description: "專案背景知識，包含架構決策與技術選型。適用於所有 Agent 啟動時。"
+version: "1.0.0"
+metadata: {
+  "openclaw": {
+    "emoji": "📚",
+    "always": true,
+    "requires": {
+      "config": ["memory/shared/project.md"]
+    },
+    "user-invocable": false
+  }
+}
+---
+# 內容（與現有相同，無需修改）
+```
+
+> **注意**：只需在 frontmatter 加入 `metadata.openclaw` 區塊，內容本身完全相容。
+
+### 10.4 Hook 遷移：bash → TypeScript
+
+**現有（`scripts/hooks/on-agent-stop.sh`）**：
+```bash
+#!/bin/bash
+git add memory/handoffs/ memory/shared/
+git commit -m "handoff: $(date)"
+```
+
+**遷移後（`workspace/hooks/handoff-commit/handler.ts`）**：
+```typescript
+import type { HookHandler } from "@openclaw/sdk";
+import { execSync } from "child_process";
+
+// HOOK.md 中宣告事件：session:end
+const handler: HookHandler = async (ctx, event) => {
+  const { workspacePath, agentId } = ctx;
+  const handoffDir = `${workspacePath}/memory/handoffs`;
+
+  // 1. git commit 交接文件與共用記憶
+  execSync(`git -C ${workspacePath} add memory/handoffs/ MEMORY.md`);
+  execSync(
+    `git -C ${workspacePath} commit -m "handoff: ${agentId} ${event.data?.status ?? 'completed'} at ${new Date().toISOString()}"`,
+    { stdio: "pipe" }
+  );
+
+  // 2. 透過 Gateway RPC 通知使用者
+  await ctx.rpc("chat.send", {
+    message: `✅ ${agentId} 交接完成，交接文件已 commit。`,
+  });
+
+  return { success: true };
+};
+
+export default handler;
+```
+
+### 10.5 交接（Handoff）機制 OpenClaw 實作
+
+OpenClaw 本身無原生交接機制，以 **自訂 Skill + 工作區記憶** 實作：
+
+```
+workspace/
+├── skills/
+│   └── handoff-protocol/
+│       └── SKILL.md          ← 交接規範（與現有格式相同）
+├── memory/
+│   └── handoffs/             ← 保留現有交接文件目錄
+│       └── {run-id}/
+│           └── 01-fetcher.md
+└── hooks/
+    ├── handoff-commit/       ← session:end 時 git commit
+    │   ├── HOOK.md
+    │   └── handler.ts
+    └── handoff-inject/       ← session:start 時注入前次交接文件
+        ├── HOOK.md
+        └── handler.ts        ← 讀取最新 handoffs/ 寫入今日 daily log
+```
+
+**`handoff-inject/handler.ts`（session:start 注入）**：
+```typescript
+import type { HookHandler } from "@openclaw/sdk";
+import { readFileSync, readdirSync } from "fs";
+import { join } from "path";
+
+const handler: HookHandler = async (ctx) => {
+  const handoffsDir = join(ctx.workspacePath, "memory", "handoffs");
+
+  // 找最新交接文件
+  const runs = readdirSync(handoffsDir).sort().reverse();
+  if (!runs.length) return {};
+
+  const latestRun = runs[0];
+  const files = readdirSync(join(handoffsDir, latestRun)).sort().reverse();
+  if (!files.length) return {};
+
+  const handoff = readFileSync(
+    join(handoffsDir, latestRun, files[0]),
+    "utf-8"
+  );
+
+  // 注入到今日 daily log 的開頭
+  const today = new Date().toISOString().split("T")[0];
+  const dailyPath = join(ctx.workspacePath, "memory", `${today}.md`);
+  const existing = existsSync(dailyPath) ? readFileSync(dailyPath, "utf-8") : "";
+
+  writeFileSync(
+    dailyPath,
+    `## 交接文件注入（${latestRun}）\n\n${handoff}\n\n---\n\n${existing}`
+  );
+
+  return {};
+};
+export default handler;
+```
+
+### 10.6 openclaw.json 設計（取代 registry.json + agent-config.json）
+
+```json5
+{
+  // Agent 設定（取代 registry.json）
+  "agents": [
+    {
+      "id": "featured",
+      "name": "Featured Agent",
+      "description": "入口代理，任務偵測與 Agent 引導",
+      "workspace": "~/.openclaw/workspace/featured",
+      "model": { "primary": "anthropic/claude-opus-4-6" },
+      "permissions": { "allowedCommands": ["read", "write", "bash", "edit"] }
+    },
+    {
+      "id": "fetcher",
+      "name": "Fetcher Agent",
+      "description": "下載專案並執行編譯",
+      "workspace": "~/.openclaw/workspace/fetcher",
+      "model": { "primary": "anthropic/claude-opus-4-6" },
+      "permissions": { "allowedCommands": ["read", "write", "bash", "edit"] }
+    },
+    {
+      "id": "fixer",
+      "name": "Fixer Agent",
+      "description": "分析並修復編譯錯誤",
+      "workspace": "~/.openclaw/workspace/fixer",
+      "model": { "primary": "anthropic/claude-opus-4-6" }
+    },
+    {
+      "id": "developer",
+      "name": "Developer Agent",
+      "description": "在成功編譯的專案上新增功能",
+      "workspace": "~/.openclaw/workspace/developer",
+      "model": { "primary": "anthropic/claude-opus-4-6" }
+    }
+  ],
+
+  // 技能載入設定（取代 agent-config.json skills 區塊）
+  "skills": {
+    "load": {
+      "watch": true,
+      "watchDebounceMs": 250,
+      "extraDirs": ["~/.openclaw/workspace/shared-skills"]
+    }
+  },
+
+  // 記憶設定（取代 agent-config.json memory 區塊）
+  "memory": {
+    "provider": "lancedb",
+    "path": "~/.openclaw/workspace/memory/lancedb"
+  },
+
+  // Hooks 設定
+  "hooks": {
+    "internal": {
+      "entries": {
+        "boot-md": {},
+        "session-memory": {},
+        "handoff-inject": { "enabled": true },
+        "handoff-commit": { "enabled": true }
+      }
+    }
+  }
+}
+```
+
+### 10.7 遷移時序
 
 ```mermaid
 gantt
-    title 遷移計畫
+    title 遷移計畫（Claude Code → OpenClaw → ADK/SDK）
     dateFormat  YYYY-MM
-    section Phase 1（現在）
-    Claude Code 手動驗證    :active, p1, 2024-03, 2024-05
-    交接文件格式確認        :p1b, 2024-03, 2024-04
-    section Phase 2
-    SDK 半自動化            :p2, 2024-05, 2024-07
-    Handoff JSON 轉 output_format :p2b, 2024-05, 2024-06
-    section Phase 3
-    ADK 全自動化            :p3, 2024-07, 2024-09
-    Featured Agent 自動安裝 :p3b, 2024-08, 2024-09
+    section Phase 1：Claude Code（驗證期）
+    架構設計與需求確認         :done, p1a, 2024-03, 2024-04
+    Claude Code 手動工作流驗證 :active, p1b, 2024-04, 2024-06
+    交接文件格式確認與穩定化   :p1c, 2024-04, 2024-05
+
+    section Phase 2：OpenClaw（整合期）
+    SKILL.md frontmatter 升級  :p2a, 2024-06, 2024-07
+    bash Hooks → TS handler.ts :p2b, 2024-06, 2024-07
+    memory/ → MEMORY.md+LanceDB:p2c, 2024-07, 2024-08
+    registry.json → openclaw.json:p2d, 2024-07, 2024-08
+    IM 渠道整合（飛書/Telegram):p2e, 2024-08, 2024-09
+
+    section Phase 3：ADK/SDK（自動化期）
+    AgentDefinition 化          :p3a, 2024-09, 2024-11
+    Featured Agent 自動安裝      :p3b, 2024-10, 2024-11
+    output_format JSON 交接      :p3c, 2024-09, 2024-10
 ```
 
 ---
 
-## 11. 設計決策紀錄（ADR）
+## 11. 未來遷移路徑（OpenClaw → ADK/SDK）
+
+### 11.1 元件對應
+
+| OpenClaw 元件 | ADK/SDK 對應 |
+|--------------|-------------|
+| `workspace/SOUL.md` + `AGENTS.md` | `AgentDefinition(description=..., prompt=...)` |
+| `~/.openclaw/skills/` | `system_prompt` 中的知識注入 |
+| `memory/handoffs/*.md` | 結構化 `output_format` JSON schema |
+| `hooks/handler.ts` | `PostToolUse` callback |
+| `openclaw.json` agents[] | `ClaudeAgentOptions` 參數 |
+| Gateway WebSocket | `ClaudeSDKClient` 長連接 |
+| 多渠道（IM）觸發 | `query()` API 呼叫 |
+
+---
+
+## 12. 設計決策紀錄（ADR）
 
 | # | 決策 | 原因 | 取捨 |
 |---|------|------|------|
-| ADR-01 | Skill 以資料夾格式儲存（非單一檔案） | 未來可擴充（加 examples/、tests/ 等子檔案） | 略增目錄複雜度 |
-| ADR-02 | Skill 共用以 symlink 實作 | 避免複製、單一事實來源 | Windows 不支援（本期限制） |
-| ADR-03 | 工作記憶交接後清除 | 避免 Context 爆炸 | 需要完善摘要機制 |
-| ADR-04 | 交接文件採 Markdown + YAML frontmatter | 人可讀、機器可解析、Git diff 友好 | 不如純 JSON 嚴格 |
-| ADR-05 | run-id 採 timestamp | 簡單、不依賴外部服務 | 極低機率衝突 |
-| ADR-06 | Agent 安裝預設手動 | 本期驗證安全性，未來再自動化 | 需使用者額外操作 |
+| ADR-01 | Skill 以資料夾格式儲存（非單一檔案） | 與 OpenClaw SKILL.md 格式完全相容，未來可擴充 | 略增目錄複雜度 |
+| ADR-02 | Skill 共用以 symlink 實作（Phase 1） | 避免複製；Phase 2 遷移後由 OpenClaw 全域層取代 | Windows 不支援（本期限制） |
+| ADR-03 | 工作記憶交接後清除 | 避免 Context 爆炸；OpenClaw daily log 機制自然支援 | 需要完善摘要機制 |
+| ADR-04 | 交接文件採 Markdown + YAML frontmatter | 人可讀、Git diff 友好；與 OpenClaw SKILL.md 格式一致 | 不如純 JSON 嚴格 |
+| ADR-05 | run-id 採 timestamp | 簡單、不依賴外部服務；OpenClaw session ID 可作替代 | 極低機率衝突 |
+| ADR-06 | Agent 安裝預設手動 | 本期驗證安全性；Phase 2 改用 `openclaw install` | 需使用者額外操作 |
+| ADR-07 | SOUL.md 格式優先對齊 OpenClaw | 降低 Phase 2 遷移成本，Claude Code 與 OpenClaw 均可直接使用 | OpenClaw 特有欄位在 Claude Code 期間為空 |
+| ADR-08 | 交接機制在 OpenClaw 以自訂 Skill + Hook 實作 | OpenClaw 無原生交接概念，但 Hook 系統足以模擬 | 需維護 2 個 Hook（inject + commit） |
+| ADR-09 | hooks 從 bash 設計為可轉 TypeScript | Phase 2 直接重寫為 handler.ts，邏輯不變只換語言 | 需學習 OpenClaw Hook SDK |
