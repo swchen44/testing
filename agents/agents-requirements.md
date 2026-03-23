@@ -1,16 +1,17 @@
 # Consys Experts — 需求書
 
-**文件版本**：v2.6
+**文件版本**：v2.7
 **狀態**：Draft
 **目標讀者**：架構師、開發者、產品負責人
 **改版說明**：
 - v2.0：以使用者故事為主軸重寫，記錄設計決策的「為什麼」
-- v2.1：明確 Expert 定義、引入 Harness Engineering 概念、repo 更名為 `consys-experts`、補充環境變數定義
-- v2.2：expert.json 加入 owner、環境變數統一 CONSYS_EXPERTS_ 前綴、Agent First 流程補充 clone 步驟、skill 名稱更新
+- v2.1：明確 Expert 定義、引入 Harness Engineering 概念、repo 更名為 `connsys-experts`、補充環境變數定義
+- v2.2：expert.json 加入 owner、環境變數統一 CONNSYS_EXPERTS_ 前綴、Agent First 流程補充 clone 步驟、skill 名稱更新
 - v2.3：新增 Future Work（Security / Memory+Learn）、參考資料
 - v2.4：加入三階段演進願景、Expert 交接流程需求、本地三區記憶設計需求
 - v2.5：Expert 和 Skill 資料夾統一加入 `test/`、`report/`、`README.md`；`unittest/` 更名為 `test/`
 - v2.6：Hook 實作語言改為 Shell 優先，複雜邏輯用 Python，JS 為最後考慮
+- v2.7：專案更名 consys → connsys（雙 n），更新所有 repo/env var 名稱
 
 > **注意**：文件中所列的 expert、skill 名稱均為**示例**，用於說明命名規則與架構設計。實際規劃以團隊討論為準。
 
@@ -31,7 +32,7 @@
 |------|------|-----------------|
 | **上下文工程**（Context Engineering） | 持續維護知識庫，讓 Agent 能存取動態資料 | SKILL.md 技能庫、expert.md、expert.local.md |
 | **架構約束**（Architectural Constraints） | 加入確定性工具（Linter、測試），強制執行規範 | Hooks（pre-compact、write-guard）、hand-off 格式規範 |
-| **垃圾回收**（Garbage Collection） | 定期執行 Agent 清理過時文件，對抗系統熵增 | session-end 自動整理記憶，push 至 consys-memory |
+| **垃圾回收**（Garbage Collection） | 定期執行 Agent 清理過時文件，對抗系統熵增 | session-end 自動整理記憶，push 至 connsys-memory |
 
 **文章關鍵結論**：隨著 AI Agent 的進化，軟體開發的嚴謹性（Rigor）正從「代碼細節」遷移到「系統架構與環境設計」。工程師的工作重點將從「打字寫代碼」轉向**「設計環境、反饋循環與控制系統」**。
 
@@ -113,7 +114,7 @@
 │  對於風險較低、流程明確的任務（如 build → CI），Expert 可自動執行       │
 │  完整流程，包含自動切換到下一個 Expert（根據 transitions 設定）。       │
 │  仍對高風險操作觸發 Human in the Loop。                              │
-│  需要成熟的記憶系統支撐（Local Memory + consys-memory）。             │
+│  需要成熟的記憶系統支撐（Local Memory + connsys-memory）。             │
 ├─────────────────────────────────────────────────────────────────────┤
 │  Stage 3：Expert 之間可互相溝通（Multi-Agent Collaboration）          │
 │                                                                     │
@@ -136,7 +137,7 @@
 | 設計決策 | 理由 |
 |---------|------|
 | Expert = Agent + Workflow + Tool + Knowledge | 讓 Claude Code 成為真正懂 Consys 流程的專家，而非通用 AI |
-| 獨立的 `consys-experts` repo | Expert 工具與 source code 分開管理，兩者生命週期不同；同仁可在任何 workspace 安裝 |
+| 獨立的 `connsys-experts` repo | Expert 工具與 source code 分開管理，兩者生命週期不同；同仁可在任何 workspace 安裝 |
 | 以 symlink 為預設安裝方式 | 切換 Expert 時直接重建 link 即可，無需處理檔案複製的一致性問題 |
 | CLAUDE.md 採覆蓋（替換）策略 | 切換 Expert 等於「換一個專家來做事」——新專家帶來全新的技能組合 |
 | install.sh 不觸碰 settings.json | 平台設定由 `setup-claude.sh` 處理，降低 install.sh 與平台的耦合 |
@@ -156,15 +157,15 @@
 **流程**：
 ```
 0. 初始狀態：~/workspace/ 為空目錄
-1. 在 ~/workspace/ 執行：git clone {consys-experts-url}
-   → 出現 ~/workspace/consys-experts/
-2. 瀏覽 consys-experts/ 資料夾，找到所需 Expert（如 wifi/experts/wifi-build-expert/）
-3. 執行：source consys-experts/wifi/experts/wifi-build-expert/install.sh
+1. 在 ~/workspace/ 執行：git clone {connsys-experts-url}
+   → 出現 ~/workspace/connsys-experts/
+2. 瀏覽 connsys-experts/ 資料夾，找到所需 Expert（如 wifi/experts/wifi-build-expert/）
+3. 執行：source connsys-experts/wifi/experts/wifi-build-expert/install.sh
    → 建立 .claude/ symlinks、生成 CLAUDE.md、設定環境變數
 4. 開啟 Claude Code → 已具備 wifi-build-expert 的 Skills/Hooks/Commands
 5. 與 Claude 互動，Claude 協助用 repo tool 下載 fw 到 codespace/fw/
 6. 需要切換到 wifi-cicd-expert 時：
-   source consys-experts/wifi/experts/wifi-cicd-expert/install.sh --switch
+   source connsys-experts/wifi/experts/wifi-cicd-expert/install.sh --switch
    確認變更清單後，重新開啟 Claude Code
 ```
 
@@ -172,7 +173,7 @@
 - install.sh 執行後，`.claude/skills/`、`.claude/hooks/`、`.claude/commands/` 均正確建立 symlink
 - `CLAUDE.md` 被生成，內容 @include `expert.md` 與 `expert.local.md`
 - 環境變數正確設定（見 FR-03）
-- `consys-memory/` repo 被自動 clone，員工資料夾以 git username 命名
+- `connsys-memory/` repo 被自動 clone，員工資料夾以 git username 命名
 
 ---
 
@@ -185,8 +186,8 @@
 1. 同仁已有：
    ~/workspace/.repo
    ~/workspace/bora/wifi, bt, mcu, build, coexistence (各為獨立 git repo)
-2. 在 ~/workspace/ clone consys-experts
-3. 執行 source consys-experts/wifi/experts/wifi-build-expert/install.sh
+2. 在 ~/workspace/ clone connsys-experts
+3. 執行 source connsys-experts/wifi/experts/wifi-build-expert/install.sh
 4. install.sh 自動偵測到 .repo 存在，判斷為 legacy 場景
 5. 建立 .claude/ symlinks，生成 CLAUDE.md
 6. 開啟 Claude Code，既有 code 與新安裝的 Expert 技能整合運作
@@ -194,7 +195,7 @@
 
 **驗收條件**：
 - install.sh 能自動偵測場景（legacy vs agent-first）
-- Legacy 場景的 `CONSYS_EXPERTS_CODE_SPACE_PATH` 指向 workspace 根目錄
+- Legacy 場景的 `CONNSYS_EXPERTS_CODE_SPACE_PATH` 指向 workspace 根目錄
 - 不影響已存在的 bora/ 資料夾與 .repo
 
 ---
@@ -205,7 +206,7 @@
 
 **流程**：
 ```
-1. 執行 source consys-experts/wifi/experts/wifi-cicd-expert/install.sh --switch
+1. 執行 source connsys-experts/wifi/experts/wifi-cicd-expert/install.sh --switch
 2. 系統先觸發 hand-off，儲存當前 session 狀態
 3. 移除舊 Expert 的所有 symlinks（common + private 全部替換）
 4. 建立新 Expert 的 symlinks
@@ -246,9 +247,9 @@
 **流程**：
 ```
 1. session-end hook 在每次對話結束時自動觸發
-2. 將 session 摘要寫入 consys-memory/employees/{username}/sessions/YYYY-MM-DD.md
-3. 自動 git push 到 consys-memory 的 remote
-4. 管理者可 clone consys-memory，查看所有同仁的使用資料
+2. 將 session 摘要寫入 connsys-memory/employees/{username}/sessions/YYYY-MM-DD.md
+3. 自動 git push 到 connsys-memory 的 remote
+4. 管理者可 clone connsys-memory，查看所有同仁的使用資料
 5. 分析：哪些 Expert 最常用、哪些步驟最常需要人工介入
 ```
 
@@ -258,15 +259,15 @@
 
 ## 3. 系統邊界與目錄結構
 
-### 3.1 `consys-experts` Repo 結構
+### 3.1 `connsys-experts` Repo 結構
 
 採用**五層資料夾設計**（Layer 1–5），詳細結構見設計書 §2–3。以下為簡化概覽：
 
 ```
-consys-experts/ (git)
+connsys-experts/ (git)
 ├── README.md
 ├── registry.json                    ← 所有 Expert 目錄（expert-discovery 用）
-├── install.sh                       ← 頂層：設定環境變數、clone consys-memory
+├── install.sh                       ← 頂層：設定環境變數、clone connsys-memory
 │
 ├── framework/                       ← Layer 1：framework domain
 │   ├── experts/
@@ -326,18 +327,18 @@ workspace/
 └── （空）
 ```
 
-**Step 1 — clone consys-experts**
+**Step 1 — clone connsys-experts**
 ```
 workspace/
-└── consys-experts/ (git)
+└── connsys-experts/ (git)
 ```
 
-**Step 2 — `source consys-experts/wifi/experts/wifi-build-expert/install.sh`**
+**Step 2 — `source connsys-experts/wifi/experts/wifi-build-expert/install.sh`**
 ```
-workspace/                                       ← $CONSYS_EXPERTS_WORKSPACE_ROOT_PATH
-├── consys-experts/ (git)
+workspace/                                       ← $CONNSYS_EXPERTS_WORKSPACE_ROOT_PATH
+├── connsys-experts/ (git)
 │
-├── consys-memory/ (git)                         ← install.sh 自動 clone
+├── connsys-memory/ (git)                         ← install.sh 自動 clone
 │   └── employees/
 │       └── john.doe/                            ← git config user.name
 │           ├── sessions/
@@ -353,13 +354,13 @@ workspace/                                       ← $CONSYS_EXPERTS_WORKSPACE_R
     ├── expert.local.md                          ← 個人客製化（選填，.gitignore）
     ├── .active-expert                           ← "wifi-build-expert"
     ├── skills/                                  ← Knowledge symlinks
-    │   ├── framework-expert-discovery-knowhow → $CONSYS_EXPERTS_PATH/framework/experts/framework-common-expert/skills/framework-expert-discovery-knowhow/
+    │   ├── framework-expert-discovery-knowhow → $CONNSYS_EXPERTS_PATH/framework/experts/framework-common-expert/skills/framework-expert-discovery-knowhow/
     │   ├── framework-handoff-flow             → .../framework-common-expert/skills/framework-handoff-flow/
-    │   ├── wifi-protocol-knowhow              → $CONSYS_EXPERTS_PATH/wifi/experts/wifi-common-expert/skills/wifi-protocol-knowhow/
-    │   ├── system-gerrit-tool                 → $CONSYS_EXPERTS_PATH/system/experts/system-common-expert/skills/system-gerrit-tool/
-    │   └── wifi-build-flow                    → $CONSYS_EXPERTS_PATH/wifi/experts/wifi-build-expert/skills/wifi-build-flow/
+    │   ├── wifi-protocol-knowhow              → $CONNSYS_EXPERTS_PATH/wifi/experts/wifi-common-expert/skills/wifi-protocol-knowhow/
+    │   ├── system-gerrit-tool                 → $CONNSYS_EXPERTS_PATH/system/experts/system-common-expert/skills/system-gerrit-tool/
+    │   └── wifi-build-flow                    → $CONNSYS_EXPERTS_PATH/wifi/experts/wifi-build-expert/skills/wifi-build-flow/
     ├── hooks/                                   ← Workflow symlinks（來自 framework-common-expert）
-    │   ├── session-start.sh          → $CONSYS_EXPERTS_PATH/framework/experts/framework-common-expert/hooks/session-start.sh
+    │   ├── session-start.sh          → $CONNSYS_EXPERTS_PATH/framework/experts/framework-common-expert/hooks/session-start.sh
     │   ├── session-end.sh            → .../framework-common-expert/hooks/session-end.sh
     │   ├── pre-compact.sh            → .../framework-common-expert/hooks/pre-compact.sh
     │   ├── mid-session-checkpoint.sh → .../framework-common-expert/hooks/mid-session-checkpoint.sh
@@ -375,12 +376,12 @@ workspace/                                       ← $CONSYS_EXPERTS_WORKSPACE_R
 
 **Step 3 — 開啟 Claude Code，Expert 協助下載 fw**
 ```
-workspace/                                       ← $CONSYS_EXPERTS_WORKSPACE_ROOT_PATH
-├── consys-experts/ (git)
-├── consys-memory/ (git)
+workspace/                                       ← $CONNSYS_EXPERTS_WORKSPACE_ROOT_PATH
+├── connsys-experts/ (git)
+├── connsys-memory/ (git)
 ├── CLAUDE.md
 ├── .claude/
-└── codespace/                                   ← $CONSYS_EXPERTS_CODE_SPACE_PATH
+└── codespace/                                   ← $CONNSYS_EXPERTS_CODE_SPACE_PATH
     └── fw/
         ├── .repo (git)
         └── bora/
@@ -393,11 +394,11 @@ workspace/                                       ← $CONSYS_EXPERTS_WORKSPACE_R
 **Step 4 — 下載多套 fw + driver SDK**
 ```
 workspace/
-├── consys-experts/ (git)
-├── consys-memory/ (git)
+├── connsys-experts/ (git)
+├── connsys-memory/ (git)
 ├── CLAUDE.md
 ├── .claude/
-└── codespace/                                   ← $CONSYS_EXPERTS_CODE_SPACE_PATH
+└── codespace/                                   ← $CONNSYS_EXPERTS_CODE_SPACE_PATH
     ├── fw/                                      ← 第一套 firmware
     │   ├── .repo (git)
     │   └── bora/
@@ -440,19 +441,19 @@ workspace/
     └── coexistence/ (git)
 ```
 
-**Step 1 — clone consys-experts**
+**Step 1 — clone connsys-experts**
 ```
 workspace/
 ├── .repo (git)
 ├── bora/ (同上)
-└── consys-experts/ (git)
+└── connsys-experts/ (git)
 ```
 
-**Step 2 — `source consys-experts/wifi/experts/wifi-build-expert/install.sh`**
+**Step 2 — `source connsys-experts/wifi/experts/wifi-build-expert/install.sh`**
 （install.sh 偵測到根目錄有 `.repo`，自動判斷 legacy 場景）
 ```
-workspace/                                       ← $CONSYS_EXPERTS_WORKSPACE_ROOT_PATH
-│                                                   $CONSYS_EXPERTS_CODE_SPACE_PATH（同一路徑）
+workspace/                                       ← $CONNSYS_EXPERTS_WORKSPACE_ROOT_PATH
+│                                                   $CONNSYS_EXPERTS_CODE_SPACE_PATH（同一路徑）
 ├── .repo (git)
 ├── bora/
 │   ├── wifi/ (git)
@@ -460,21 +461,21 @@ workspace/                                       ← $CONSYS_EXPERTS_WORKSPACE_R
 │   ├── mcu/ (git)
 │   ├── build/ (git)
 │   └── coexistence/ (git)
-├── consys-experts/ (git)
-├── consys-memory/ (git)
+├── connsys-experts/ (git)
+├── connsys-memory/ (git)
 ├── CLAUDE.md                                    ← 生成
 └── .claude/
     ├── expert.md
     ├── expert.local.md                          ← 選填
     ├── .active-expert                           ← "wifi-build-expert"
     ├── skills/
-    │   ├── framework-expert-discovery-knowhow → $CONSYS_EXPERTS_PATH/framework/experts/framework-common-expert/skills/framework-expert-discovery-knowhow/
+    │   ├── framework-expert-discovery-knowhow → $CONNSYS_EXPERTS_PATH/framework/experts/framework-common-expert/skills/framework-expert-discovery-knowhow/
     │   ├── framework-handoff-flow             → .../framework-common-expert/skills/framework-handoff-flow/
-    │   ├── wifi-protocol-knowhow              → $CONSYS_EXPERTS_PATH/wifi/experts/wifi-common-expert/skills/wifi-protocol-knowhow/
-    │   ├── system-gerrit-tool                 → $CONSYS_EXPERTS_PATH/system/experts/system-common-expert/skills/system-gerrit-tool/
-    │   └── wifi-build-flow                    → $CONSYS_EXPERTS_PATH/wifi/experts/wifi-build-expert/skills/wifi-build-flow/
+    │   ├── wifi-protocol-knowhow              → $CONNSYS_EXPERTS_PATH/wifi/experts/wifi-common-expert/skills/wifi-protocol-knowhow/
+    │   ├── system-gerrit-tool                 → $CONNSYS_EXPERTS_PATH/system/experts/system-common-expert/skills/system-gerrit-tool/
+    │   └── wifi-build-flow                    → $CONNSYS_EXPERTS_PATH/wifi/experts/wifi-build-expert/skills/wifi-build-flow/
     ├── hooks/
-    │   ├── session-start.sh          → $CONSYS_EXPERTS_PATH/framework/experts/framework-common-expert/hooks/session-start.sh
+    │   ├── session-start.sh          → $CONNSYS_EXPERTS_PATH/framework/experts/framework-common-expert/hooks/session-start.sh
     │   ├── session-end.sh            → .../framework-common-expert/hooks/session-end.sh
     │   ├── pre-compact.sh            → .../framework-common-expert/hooks/pre-compact.sh
     │   ├── mid-session-checkpoint.sh → .../framework-common-expert/hooks/mid-session-checkpoint.sh
@@ -494,7 +495,7 @@ workspace/                                       ← $CONSYS_EXPERTS_WORKSPACE_R
 |---|---|---|
 | Workspace root | `~/workspace/` | `~/workspace/` |
 | Code space | `~/workspace/codespace/` | `~/workspace/`（同 workspace root）|
-| `CONSYS_EXPERTS_CODE_SPACE_PATH` | `~/workspace/codespace` | `~/workspace` |
+| `CONNSYS_EXPERTS_CODE_SPACE_PATH` | `~/workspace/codespace` | `~/workspace` |
 | code 由誰下載 | Claude Expert 互動後用 repo tool 下載 | 同仁已手動下載 |
 | 場景自動偵測 | 根目錄無 `.repo` | 根目錄有 `.repo` |
 
@@ -506,7 +507,7 @@ workspace/                                       ← $CONSYS_EXPERTS_WORKSPACE_R
 
 | 編號 | 需求 | 優先級 | 理由 |
 |------|------|--------|------|
-| FR-01-1 | repo 命名為 `consys-experts`，Expert 資料夾命名為 `experts/` | Must | 避免與 AI 的「agent」概念混淆，名稱更 general |
+| FR-01-1 | repo 命名為 `connsys-experts`，Expert 資料夾命名為 `experts/` | Must | 避免與 AI 的「agent」概念混淆，名稱更 general |
 | FR-01-2 | 每個 Expert 資料夾含 `expert.json`、`CLAUDE.md`、`install.sh`、`skills/`、`test/`、`report/`、`README.md` | Must | 標準化結構，讓 install.sh 可一致處理；test/ 和 report/ 支援品質追蹤 |
 | FR-01-3 | `expert.json` 含名稱、描述、觸發詞、skills、transitions、dependencies | Must | 資訊越完整，expert-discovery 越有用 |
 | FR-01-4 | `framework-common-expert` 存放跨所有 domain 共用的 skills / hooks / commands；各 domain 的 `{domain}-common-expert` 存放該 domain 共用內容 | Must | 三層依賴（framework → domain → private）對應 Expert 定義的三個組件 |
@@ -526,30 +527,30 @@ workspace/                                       ← $CONSYS_EXPERTS_WORKSPACE_R
 | FR-02-7 | install.sh **不**修改 `settings.json` / `settings.local.json` | Must | 平台設定由 `setup-claude.sh` 處理，解耦平台相依 |
 | FR-02-8 | install.sh **不**包含 MCP 設定 | Must | MCP 無法用 symlink 實作，屬不同層次的設定 |
 | FR-02-9 | 以 `source` 方式執行，環境變數可帶回 parent shell | Must | `./install.sh` 無法把環境變數帶回 parent shell |
-| FR-02-10 | 首次執行時自動 clone `consys-memory` repo | Must | 後臺資料收集的基礎設施 |
+| FR-02-10 | 首次執行時自動 clone `connsys-memory` repo | Must | 後臺資料收集的基礎設施 |
 | FR-02-11 | 切換 Expert 時印出變更清單（新增/移除/保留的 skills） | Must | 讓同仁知道能力邊界已改變 |
 | FR-02-12 | Hook 實作語言優先順序：**Shell（預設）→ Python（複雜邏輯）→ JS（最後考慮）** | Must | Shell 在所有開發環境普遍存在，無需額外 runtime；Python 是韌體團隊的第二語言；JS 保留作為 OpenClaw 遷移的備用路徑 |
 
 ### FR-03：環境變數
 
 所有環境變數由 install.sh 透過 `source` 設定，可供 Expert 的 workflow、skill、tool 直接使用。
-**所有變數統一使用 `CONSYS_EXPERTS_` 前綴**。
+**所有變數統一使用 `CONNSYS_EXPERTS_` 前綴**。
 
 | 環境變數 | 說明 | Agent First 範例值 | Legacy 範例值 |
 |---------|------|-------------------|--------------|
-| `CONSYS_EXPERTS_PATH` | `consys-experts` repo 的路徑 | `~/workspace/consys-experts` | `~/workspace/consys-experts` |
-| `CONSYS_EXPERTS_WORKSPACE_ROOT_PATH` | 工作根目錄（`.claude/` 所在）| `~/workspace` | `~/workspace` |
-| `CONSYS_EXPERTS_CODE_SPACE_PATH` | 程式碼路徑（source code repo 所在）| `~/workspace/codespace` | `~/workspace` |
-| `CONSYS_EXPERTS_MEMORY_PATH` | `consys-memory` repo 的路徑 | `~/workspace/consys-memory` | `~/workspace/consys-memory` |
-| `CONSYS_EXPERTS_EMPLOYEE_ID` | 員工工號（自動從 `git config user.name` 取得）| `john.doe` | `john.doe` |
+| `CONNSYS_EXPERTS_PATH` | `connsys-experts` repo 的路徑 | `~/workspace/connsys-experts` | `~/workspace/connsys-experts` |
+| `CONNSYS_EXPERTS_WORKSPACE_ROOT_PATH` | 工作根目錄（`.claude/` 所在）| `~/workspace` | `~/workspace` |
+| `CONNSYS_EXPERTS_CODE_SPACE_PATH` | 程式碼路徑（source code repo 所在）| `~/workspace/codespace` | `~/workspace` |
+| `CONNSYS_EXPERTS_MEMORY_PATH` | `connsys-memory` repo 的路徑 | `~/workspace/connsys-memory` | `~/workspace/connsys-memory` |
+| `CONNSYS_EXPERTS_EMPLOYEE_ID` | 員工工號（自動從 `git config user.name` 取得）| `john.doe` | `john.doe` |
 
 **使用範例**（在 skill 或 hook 中）：
 ```bash
 # 在 skill 中引用 code space 路徑
-BUILD_DIR="$CONSYS_EXPERTS_CODE_SPACE_PATH/fw/bora/build"
+BUILD_DIR="$CONNSYS_EXPERTS_CODE_SPACE_PATH/fw/bora/build"
 
 # 在 hook 中推送記憶
-git -C "$CONSYS_EXPERTS_MEMORY_PATH" push origin main
+git -C "$CONNSYS_EXPERTS_MEMORY_PATH" push origin main
 ```
 
 ### FR-04：Skill 系統（Knowledge）
@@ -573,7 +574,7 @@ git -C "$CONSYS_EXPERTS_MEMORY_PATH" push origin main
 | FR-05-1 | install.sh 在 workspace 根目錄生成 `CLAUDE.md`（非 symlink） | Must |
 | FR-05-2 | CLAUDE.md @include `.claude/expert.md`（由 expert.json 生成） | Must |
 | FR-05-3 | CLAUDE.md @include `.claude/expert.local.md`（若存在） | Must |
-| FR-05-4 | `expert.local.md` 不納入 `consys-experts` repo，以 `.gitignore` 排除 | Must |
+| FR-05-4 | `expert.local.md` 不納入 `connsys-experts` repo，以 `.gitignore` 排除 | Must |
 | FR-05-5 | `expert.md` 中說明 `expert.local.md` 的存在與用途 | Should |
 
 ### FR-06：記憶系統（Workflow + 後臺）
@@ -587,11 +588,11 @@ git -C "$CONSYS_EXPERTS_MEMORY_PATH" push origin main
 | FR-06-3 | `pre-compact` hook 在 context 壓縮前存快照（最可靠存檔點）| Must | 參考 claude-memory-engine 的三存檔點設計 |
 | FR-06-4 | `mid-session-checkpoint` hook 每 20 訊息存一次 | Should | 避免長 session 中途資料遺失 |
 | FR-06-5 | `session-start` hook 載入上次摘要 + 偵測待接 hand-off | Must | 新 session 能延續上次工作 |
-| FR-06-6 | 記憶資料自動 push 到 `consys-memory` repo | Must | 後臺收集與跨裝置同步 |
+| FR-06-6 | 記憶資料自動 push 到 `connsys-memory` repo | Must | 後臺收集與跨裝置同步 |
 
 #### FR-06B：本地三區記憶（Local Three-Zone Memory）
 
-本地記憶存放於 `workspace/.claude/memory/`，分三個用途不同的區域，與遠端 `consys-memory` 後臺各司其職：
+本地記憶存放於 `workspace/.claude/memory/`，分三個用途不同的區域，與遠端 `connsys-memory` 後臺各司其職：
 
 | 編號 | 需求 | 優先級 | 理由 |
 |------|------|--------|------|
@@ -599,7 +600,7 @@ git -C "$CONSYS_EXPERTS_MEMORY_PATH" push origin main
 | FR-06-8 | 建立 `memory/working/{expert}/` 區域（當前 Expert 的飛行中狀態） | Must | 儲存 in-flight 的工作日誌、決策記錄，Expert 切換時由 hand-off hook 清除（或歸檔），避免記憶污染 |
 | FR-06-9 | 建立 `memory/handoffs/{run-id}/` 區域（交接文件，寫入後唯讀） | Must | 壓縮摘要 < 2000 tokens，新 Expert 由 session-start hook 讀取，確保交接資訊完整傳遞 |
 | FR-06-10 | `session-start` hook 自動偵測 `memory/handoffs/` 是否有待接的 hand-off 文件 | Must | 新 Expert 啟動時不需人工操作即可拿到上一個 Expert 的交接內容 |
-| FR-06-11 | 週期性記憶整理（Periodic Collection）：每日或每週自動彙整本地記憶至 consys-memory | Should | 收集長期知識，供未來 framework-learn-expert 分析，但不造成即時系統負擔 |
+| FR-06-11 | 週期性記憶整理（Periodic Collection）：每日或每週自動彙整本地記憶至 connsys-memory | Should | 收集長期知識，供未來 framework-learn-expert 分析，但不造成即時系統負擔 |
 
 ### FR-07：Hand-off 協議與 Expert 狀態機
 
@@ -608,7 +609,7 @@ git -C "$CONSYS_EXPERTS_MEMORY_PATH" push origin main
 | FR-07-1 | Hand-off 發生時機：切換 Expert 時（--switch）、session 結束時 | Must |
 | FR-07-2 | Hand-off 文件格式：YAML frontmatter + Markdown 摘要（< 2000 tokens）| Must |
 | FR-07-3 | 提供 `/handoff` 指令供同仁手動觸發 | Must |
-| FR-07-4 | Hand-off 文件同時存入本地 `memory/handoffs/{run-id}/`（當前 Expert 讀取用）及 `consys-memory/employees/{id}/handoffs/`（遠端備份） | Must |
+| FR-07-4 | Hand-off 文件同時存入本地 `memory/handoffs/{run-id}/`（當前 Expert 讀取用）及 `connsys-memory/employees/{id}/handoffs/`（遠端備份） | Must |
 | FR-07-5 | `expert.json` 的 `transitions` 欄位定義 Expert 的狀態機轉移（事件 → 下一個 Expert） | Must |
 | FR-07-6 | 轉移事件（如 BUILD_SUCCESS / BUILD_FAILED）由 Expert 在工作完成後主動發出，觸發 hand-off 流程 | Must |
 | FR-07-7 | 若轉移目標為 `null`（如 BUILD_FAILED），表示需要人工介入，Expert 應提示同仁並等待 | Must |
@@ -618,7 +619,7 @@ git -C "$CONSYS_EXPERTS_MEMORY_PATH" push origin main
 
 | 編號 | 需求 | 優先級 | 理由 |
 |------|------|--------|------|
-| FR-08-1 | `consys-memory` 為單一 repo，以工號（git username）為子資料夾 | Must | 集中管理，不需每人維護自己的 repo |
+| FR-08-1 | `connsys-memory` 為單一 repo，以工號（git username）為子資料夾 | Must | 集中管理，不需每人維護自己的 repo |
 | FR-08-2 | 收集內容：session 摘要、hand-off 文件、使用的 Expert 名稱 | Must | 管理者可分析哪些 Expert 最常用、哪些流程最常卡關 |
 | FR-08-3 | 預設自動 push，可設定為手動 | Must | 減少同仁操作負擔 |
 
@@ -653,7 +654,7 @@ git -C "$CONSYS_EXPERTS_MEMORY_PATH" push origin main
 - 本期 install.sh 僅處理 symlink/copy，不觸碰 `settings.json`（由 `setup-claude.sh` 處理）
 - MCP 設定不在 install.sh 範圍內
 - Symlink 在 Windows 環境需要額外處理（本期不支援）
-- `consys-memory` repo 的 push 需要同仁對 remote 有寫入權限
+- `connsys-memory` repo 的 push 需要同仁對 remote 有寫入權限
 - Human in the Loop 功能為未來規劃，本期以人工切換 Expert 為主
 
 ### 假設
@@ -661,7 +662,7 @@ git -C "$CONSYS_EXPERTS_MEMORY_PATH" push origin main
 - 同仁具備基本終端機操作能力
 - 執行環境已安裝 Claude Code CLI、Git、bash
 - 同仁的 git config user.name 即其工號（企業環境統一設定）
-- `consys-memory` remote 由管理者預先建立並開放所有同仁寫入
+- `connsys-memory` remote 由管理者預先建立並開放所有同仁寫入
 
 ---
 
@@ -671,7 +672,7 @@ git -C "$CONSYS_EXPERTS_MEMORY_PATH" push origin main
 Phase 1：Claude Code（現在）
   install.sh symlink → .claude/skills（Knowledge）, hooks（Workflow）, commands（Tool）
   CLAUDE.md 生成機制
-  consys-memory Git 後臺收集
+  connsys-memory Git 後臺收集
   Hooks 以 Shell 實作（複雜邏輯用 Python）
   Human in the Loop：人工切換 Expert
 
@@ -679,7 +680,7 @@ Phase 2：OpenClaw
   install.sh --target openclaw
   SKILL.md 直接相容
   Shell/Python hooks → TypeScript handler.ts（此階段重寫 hooks）
-  consys-memory → workspace/MEMORY.md + LanceDB
+  connsys-memory → workspace/MEMORY.md + LanceDB
   Human in the Loop：Hook 觸發確認機制
 
 Phase 3：ADK/SDK（全自動）
@@ -697,8 +698,8 @@ Phase 3：ADK/SDK（全自動）
 |------|------|
 | Consys Expert | Agent 能力 + Consys Workflow + Consys Tool + Consys Knowledge 的組合體 |
 | Harness Engineering | 為 AI 打造「自動化治理體系」，透過限制行為邊界與豐富上下文，實現大規模自動化（來源：Birgitta Böckeler / Martin Fowler Blog）|
-| consys-experts | 團隊共同維護的 Expert 工具 repo |
-| consys-memory | 後臺資料收集 repo，以員工工號（git username）為子資料夾 |
+| connsys-experts | 團隊共同維護的 Expert 工具 repo |
+| connsys-memory | 後臺資料收集 repo，以員工工號（git username）為子資料夾 |
 | install.sh | 安裝腳本，建立 symlinks，生成 CLAUDE.md，設定環境變數 |
 | Agent First | 從空白 workspace 開始，由 Expert 引導下載 code 的場景 |
 | Legacy | 同仁已手動下載 code，後續引入 Expert 的場景 |
@@ -707,13 +708,13 @@ Phase 3：ADK/SDK（全自動）
 | common/ | 所有 Expert 共用的 skills/hooks/commands |
 | external/ | 整合的社群優質工具，以工具名稱為資料夾名 |
 | expert.md | 由 install.sh 從 expert.json 生成的可讀 Markdown |
-| expert.local.md | 使用者個人客製化檔，不納入 consys-experts repo |
+| expert.local.md | 使用者個人客製化檔，不納入 connsys-experts repo |
 | Human in the Loop | 對高風險操作暫停等待人類確認的機制 |
-| `CONSYS_EXPERTS_PATH` | 指向 consys-experts repo 的環境變數 |
-| `CONSYS_EXPERTS_WORKSPACE_ROOT_PATH` | 工作根目錄（.claude/ 所在），兩個場景均為 workspace 根目錄 |
-| `CONSYS_EXPERTS_CODE_SPACE_PATH` | 程式碼路徑（Agent First: codespace/；Legacy: workspace 根目錄）|
-| `CONSYS_EXPERTS_MEMORY_PATH` | 指向 consys-memory repo 的環境變數 |
-| `CONSYS_EXPERTS_EMPLOYEE_ID` | 員工工號，自動從 git config user.name 取得 |
+| `CONNSYS_EXPERTS_PATH` | 指向 connsys-experts repo 的環境變數 |
+| `CONNSYS_EXPERTS_WORKSPACE_ROOT_PATH` | 工作根目錄（.claude/ 所在），兩個場景均為 workspace 根目錄 |
+| `CONNSYS_EXPERTS_CODE_SPACE_PATH` | 程式碼路徑（Agent First: codespace/；Legacy: workspace 根目錄）|
+| `CONNSYS_EXPERTS_MEMORY_PATH` | 指向 connsys-memory repo 的環境變數 |
+| `CONNSYS_EXPERTS_EMPLOYEE_ID` | 員工工號，自動從 git config user.name 取得 |
 
 ---
 
@@ -748,7 +749,7 @@ AI Agent 生態系統的安全威脅已有實際案例：
 
 **背景**：
 
-目前 Expert 的 knowledge（SKILL.md）是靜態的，由人工撰寫與維護。隨著 consys-memory 累積越來越多的使用記錄，有機會讓 Expert 從記憶中自動學習，持續改善自己的 skills。
+目前 Expert 的 knowledge（SKILL.md）是靜態的，由人工撰寫與維護。隨著 connsys-memory 累積越來越多的使用記錄，有機會讓 Expert 從記憶中自動學習，持續改善自己的 skills。
 
 **設計方向**：
 ```
@@ -763,9 +764,9 @@ AI Agent 生態系統的安全威脅已有實際案例：
 
 | 編號 | 需求 | 優先級 |
 |------|------|--------|
-| FW-02-1 | `framework-learn-expert` 能定期分析 consys-memory 的 session 記錄 | Future |
+| FW-02-1 | `framework-learn-expert` 能定期分析 connsys-memory 的 session 記錄 | Future |
 | FW-02-2 | 從記憶中萃取重複出現的問題與解法，產生 knowhow skill 草稿 | Future |
-| FW-02-3 | 自動建立 PR，由人工 review 後合入 consys-experts repo | Future |
+| FW-02-3 | 自動建立 PR，由人工 review 後合入 connsys-experts repo | Future |
 | FW-02-4 | 實現完整的 `Think → Plan → Act → Learn` 循環 | Future |
 
 **參考實作**：[claude-mem](https://github.com/thedotmack/claude-mem)
