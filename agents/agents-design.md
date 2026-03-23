@@ -1,8 +1,8 @@
 # Consys Experts — 設計書
 
-**文件版本**：v2.4
+**文件版本**：v2.5
 **狀態**：Draft
-**依據**：agents-requirements.md v2.1
+**依據**：agents-requirements.md v2.4
 
 > **注意**：本文件中所列的 expert、skill 名稱均為**示例**，用於說明命名規則與架構設計。實際 expert 與 skill 的規劃以團隊討論為準。
 
@@ -575,9 +575,21 @@ install.sh 讀取 `expert.json` 的 `dependencies` + `private`，依序在 works
 │   ├── mid-session-checkpoint.js → .../framework-common-expert/hooks/mid-session-checkpoint.js
 │   └── shared-utils.js           → .../framework-common-expert/hooks/shared-utils.js
 │
-└── commands/
-    ├── framework-experts-tool    → .../framework-common-expert/commands/framework-experts-tool/
-    └── framework-handoff-tool    → .../framework-common-expert/commands/framework-handoff-tool/
+├── commands/
+│   ├── framework-experts-tool    → .../framework-common-expert/commands/framework-experts-tool/
+│   └── framework-handoff-tool    → .../framework-common-expert/commands/framework-handoff-tool/
+│
+└── memory/                                 ← 本地三區記憶（install.sh 首次執行時建立）
+    ├── shared/                             ← Zone 1：跨 Expert 持久共用知識
+    │   ├── project.md
+    │   ├── conventions.md
+    │   └── decisions.md
+    ├── working/                            ← Zone 2：當前 Expert 飛行中狀態（切換時清除）
+    │   └── wifi-build-expert/
+    │       └── working.md
+    └── handoffs/                           ← Zone 3：交接文件（寫入後唯讀）
+        └── {run-id}/
+            └── handoff.md
 ```
 
 ### 5.3 切換 Expert 時的 diff 輸出
@@ -712,7 +724,7 @@ build, compile, 編譯, BUILD_FAILED
 
 Hooks 設定於 project level（`workspace/.claude/settings.json`），由 `setup-claude.sh` 負責寫入，**不由 install.sh 處理**。
 
-### 9.2 consys-memory Repo 結構
+### 9.2 consys-memory Repo 結構（後臺遠端）
 
 ```
 consys-memory/ (git)
@@ -727,9 +739,218 @@ consys-memory/ (git)
     └── jane.smith/
 ```
 
+### 9.3 本地三區記憶（Local Three-Zone Memory）
+
+本地記憶存放於 `workspace/.claude/memory/`，分三個用途明確的區域：
+
+```
+workspace/.claude/memory/
+├── shared/                         ← Zone 1：跨 Expert 共用知識（持久）
+│   ├── project.md                  ← 專案背景、目標、重要決策
+│   ├── conventions.md              ← 跨 Expert 約定的規範
+│   └── decisions.md                ← 重要架構決策記錄（ADR）
+│
+├── working/                        ← Zone 2：當前 Expert 的飛行中狀態（切換時清除）
+│   └── wifi-build-expert/          ← 以 expert 名稱為子資料夾
+│       └── working.md              ← in-flight 工作日誌、當前進度、未完成項目
+│
+└── handoffs/                       ← Zone 3：交接文件（寫入後唯讀）
+    ├── 20260323-143022/            ← run-id（timestamp format）
+    │   └── handoff.md              ← 壓縮摘要 < 2000 tokens
+    └── 20260323-160011/
+        └── handoff.md
+```
+
+**三個區域的設計原則**：
+
+| 區域 | 生命週期 | 讀寫規則 | 負責 Hook |
+|------|---------|---------|---------|
+| `shared/` | 長期持久，不因 Expert 切換而清除 | 所有 Expert 可讀寫 | 任何 hook 皆可更新 |
+| `working/{expert}/` | 隨 Expert 生命週期，切換時清除（或歸檔） | 僅當前 Expert 寫入，其他可讀 | session-end、pre-compact |
+| `handoffs/{run-id}/` | 永久存在，寫入後唯讀 | 由 hand-off hook 建立，後繼 Expert 讀取 | session-end、--switch |
+
+### 9.4 本地記憶 vs consys-memory 的分工
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│               記憶系統雙層架構                                    │
+│                                                                 │
+│  本地（workspace/.claude/memory/）                              │
+│  ─────────────────────────────                                  │
+│  即時讀寫，Expert 直接存取                                        │
+│  • shared/     ← 跨 Expert 知識（環境設定、慣例）                  │
+│  • working/    ← 飛行中狀態（進度、筆記、暫存）                    │
+│  • handoffs/   ← 交接文件（< 2000 tokens 摘要）                  │
+│                                                                 │
+│  ↓ session-end / pre-compact hook 定期同步                       │
+│                                                                 │
+│  遠端（consys-memory/ git repo）                                 │
+│  ─────────────────────────────                                  │
+│  後臺收集，跨裝置同步，供 framework-learn-expert 分析              │
+│  • sessions/   ← 每次 session 的完整摘要                         │
+│  • handoffs/   ← 交接文件備份（與本地 Zone 3 對應）               │
+│  • summary.md  ← 滾動式個人知識總覽                              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**為什麼需要本地三區，不直接用 consys-memory**：
+- 本地三區是 Expert 的「工作桌」：即時讀寫，不需 git push，不依賴網路
+- consys-memory 是「歸檔書架」：異步同步，跨裝置，管理者可查閱
+- Zone 2（working）設計為「揮發性」：Expert 切換時可以清除，避免記憶污染
+- Zone 3（handoffs）設計為「手術室交班記錄」：寫入後不修改，後繼 Expert 信任其內容
+
+### 9.5 週期性記憶收集設計（Lightweight Periodic Collection）
+
+目標：讓記憶能累積供未來 `framework-learn-expert` 分析，同時**不造成即時使用的負擔**。
+
+```
+觸發時機（不干擾主流程）：
+  1. session-end hook：每次 session 結束時，同步 handoffs/ 到 consys-memory
+  2. mid-session-checkpoint hook：每 20 訊息更新 working/，不 push 到遠端
+  3. pre-compact hook：context 壓縮前存快照到 working/，是最可靠的存檔點
+  4. 排程同步（未來）：透過 cron 或 CI，每日彙整 working/ + shared/ 到 consys-memory
+
+輕量化設計原則：
+  • 非同步：git push 在背景執行，不阻塞 Expert 的 Think/Plan/Act
+  • 增量：只 push 變動的部分，不全量覆寫
+  • 限制大小：handoff.md < 2000 tokens；session summary < 5000 tokens
+  • 失敗容忍：push 失敗不影響 Expert 繼續工作，下次重試
+```
+
 ---
 
-## 10. Hand-off 文件格式
+## 10. Expert 狀態機與交接流程設計
+
+### 10.1 Expert 工作流程狀態機
+
+每個 Expert 在 `expert.json` 的 `transitions` 中宣告狀態轉移規則。當 Expert 完成工作後，根據結果事件觸發不同的下一步：
+
+```
+expert.json（以 wifi-build-expert 為例）：
+
+"transitions": {
+  "BUILD_SUCCESS": "wifi-cicd-expert",   ← 成功 → 自動切換到 CI/CD 專家
+  "BUILD_FAILED":  null                  ← 失敗 → null 表示需人工介入
+}
+```
+
+**狀態機圖（wifi-build-expert 為例）**：
+
+```
+                     ┌──────────────────────┐
+                     │   wifi-build-expert   │
+                     │    （活躍中）          │
+                     └──────────┬───────────┘
+                                │
+              ┌─────────────────┼─────────────────┐
+              │                 │                 │
+         BUILD_SUCCESS    BUILD_FAILED       /handoff（手動）
+              │                 │                 │
+              ▼                 ▼                 ▼
+   ┌──────────────────┐  ┌───────────┐  ┌──────────────────┐
+   │  wifi-cicd-      │  │  人工介入  │  │  任意目標 Expert  │
+   │  expert          │  │  (null)   │  │  （同仁指定）     │
+   │  自動切換         │  │  等待指示  │  │                  │
+   └──────────────────┘  └───────────┘  └──────────────────┘
+```
+
+**事件來源**：
+- Expert 完成任務後，透過 `framework-handoff-flow` skill 主動發出事件
+- 事件名稱在 `expert.json` 的 `transitions` 中定義（大寫慣例，如 BUILD_SUCCESS）
+- Stage 1 由人工確認後執行 `--switch`；Stage 2 未來可自動觸發
+
+### 10.2 Expert-to-Expert 交接序列圖
+
+```
+同仁              wifi-build-expert        install.sh         wifi-cicd-expert
+  │                      │                    │                    │
+  │── 開始 build 任務 ──►│                    │                    │
+  │                      │                    │                    │
+  │                 （build 完成）             │                    │
+  │                      │                    │                    │
+  │◄── BUILD_SUCCESS ───│                    │                    │
+  │    建議切換 cicd-expert                   │                    │
+  │                      │                    │                    │
+  │  [同仁確認切換]        │                    │                    │
+  │                      │                    │                    │
+  │── source install.sh --switch ──────────►│                    │
+  │                      │                    │                    │
+  │              ┌────────────────────┐        │                    │
+  │              │ hand-off hook 觸發 │        │                    │
+  │              │ 1. 更新 working/   │        │                    │
+  │              │ 2. 壓縮摘要        │        │                    │
+  │              │ 3. 寫 handoffs/   │        │                    │
+  │              │ 4. push consys-memory│      │                    │
+  │              └────────────────────┘        │                    │
+  │                      │                    │                    │
+  │                      │── 清除 working/ ──►│                    │
+  │                      │                    │── 重建 symlinks ──►│
+  │                      │                    │── 更新 CLAUDE.md ─►│
+  │                      │                    │                    │
+  │◄──────────────────── ✅ 安裝完成 ──────────────────────────────│
+  │                      │                    │                    │
+  │── 重新開啟 Claude Code ──────────────────────────────────────►│
+  │                                                               │
+  │                                              ┌────────────────────┐
+  │                                              │ session-start hook │
+  │                                              │ 1. 讀 handoffs/   │
+  │                                              │ 2. 讀 shared/     │
+  │                                              │ 3. 注入 context   │
+  │                                              └────────────────────┘
+  │                                                               │
+  │◄── 「接到 wifi-build-expert 的工作：BUILD_SUCCESS，任務是...」──│
+  │                                                               │
+  │── 繼續任務 ───────────────────────────────────────────────►  │
+```
+
+### 10.3 session-start.js：交接上下文注入
+
+`session-start.js` 是 Expert 啟動的第一件事，負責將交接資訊注入新的 Expert session：
+
+```javascript
+// 偽代碼（實際以 Claude Code hooks 規範實作）
+async function onSessionStart(context) {
+  const memoryDir = `${CONSYS_EXPERTS_WORKSPACE_ROOT_PATH}/.claude/memory`;
+
+  // 1. 偵測是否有待接的 hand-off
+  const handoffs = await readHandoffs(`${memoryDir}/handoffs/`);
+  const latestHandoff = getLatestUnread(handoffs);
+
+  // 2. 讀取共用記憶
+  const sharedContext = await readFile(`${memoryDir}/shared/project.md`);
+  const conventions   = await readFile(`${memoryDir}/shared/conventions.md`);
+
+  // 3. 將以上內容注入到 Expert 的 initial context
+  if (latestHandoff) {
+    context.inject(`
+## 來自上一個 Expert 的交接
+${latestHandoff.content}
+
+## 共用知識
+${sharedContext}
+    `);
+    latestHandoff.markAsRead();
+  }
+}
+```
+
+**為什麼這個設計是必要的**（對應 v1 設計 gap 分析）：
+- v1 設計有 `run-agent.sh`，啟動時注入 handoff context
+- v2.4 補回此功能，改以 Claude Code hook 實作（`session-start.js`）
+- 本地 `handoffs/` 存在，新 Expert 不需要去 consys-memory 拉取，降低啟動延遲
+
+### 10.4 hand-off 文件寫入時機與存放位置
+
+| 觸發事件 | 本地寫入 | 遠端同步 |
+|---------|---------|---------|
+| `--switch`（切換 Expert）| `memory/handoffs/{run-id}/handoff.md` | `consys-memory/employees/{id}/handoffs/` |
+| `session-end`（對話結束）| `memory/handoffs/{run-id}/handoff.md` | `consys-memory/employees/{id}/handoffs/` |
+| `/handoff`（手動指令）| `memory/handoffs/{run-id}/handoff.md` | 可選（手動 push）|
+| `pre-compact`（context 壓縮）| `memory/working/{expert}/working.md` | 不同步（工作草稿）|
+
+---
+
+## 11. Hand-off 文件格式
 
 ```markdown
 ---
@@ -758,7 +979,7 @@ employee_id: john.doe
 
 ---
 
-## 11. 安全與權限設計
+## 12. 安全與權限設計
 
 | 考量 | 設計 |
 |------|------|
@@ -771,9 +992,9 @@ employee_id: john.doe
 
 ---
 
-## 12. 遷移路線
+## 13. 遷移路線
 
-### 12.1 三階段遷移
+### 13.1 三階段遷移
 
 | 機制 | Phase 1：Claude Code | Phase 2：OpenClaw | Phase 3：ADK/SDK |
 |------|---------------------|------------------|-----------------|
@@ -784,7 +1005,7 @@ employee_id: john.doe
 | Memory | Markdown + Git | MEMORY.md + LanceDB | JSON output |
 | Human in Loop | 手動確認 | Hook 觸發確認 | 風險評分自動決定 |
 
-### 12.2 SKILL.md 遷移格式
+### 13.2 SKILL.md 遷移格式
 
 加入 `metadata.openclaw` 區塊即可，內容不需修改：
 
@@ -802,7 +1023,7 @@ metadata:
 
 ---
 
-## 13. 名詞定義
+## 14. 名詞定義
 
 | 術語 | 定義 |
 |------|------|
@@ -816,12 +1037,18 @@ metadata:
 | `CONSYS_EXPERTS_WORKSPACE_ROOT_PATH` | workspace 根目錄，`.claude/` 所在 |
 | `CONSYS_EXPERTS_CODE_SPACE_PATH` | 程式碼路徑（兩個場景值不同） |
 | Human in the Loop | 對高風險操作暫停等待人類確認的機制 |
+| Local Three-Zone Memory | 本地三區記憶：`shared/`（持久共用）+ `working/`（飛行中）+ `handoffs/`（交接文件） |
+| `memory/shared/` | 跨 Expert 共用知識，Expert 切換後持續存在 |
+| `memory/working/{expert}/` | 當前 Expert 的飛行中工作狀態，切換時清除 |
+| `memory/handoffs/{run-id}/` | Expert 交接摘要（< 2000 tokens），寫入後唯讀 |
+| transitions | `expert.json` 中定義的事件→下一個 Expert 狀態機轉移規則 |
+| consys-memory | 後臺遠端 git repo，供跨裝置同步與 framework-learn-expert 分析 |
 
 ---
 
-## 14. Future Work
+## 15. Future Work
 
-### 14.1 Security：Expert 安全審計機制
+### 15.1 Security：Expert 安全審計機制
 
 **動機**：
 
@@ -873,7 +1100,7 @@ framework/experts/
 
 ---
 
-### 14.2 Memory + Learn：自我檢討的 Expert
+### 15.2 Memory + Learn：自我檢討的 Expert
 
 **動機**：
 
@@ -919,7 +1146,7 @@ framework/experts/framework-learn-expert/skills/
 
 ---
 
-## 15. 參考資料
+## 16. 參考資料
 
 ### 核心概念
 

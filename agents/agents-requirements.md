@@ -1,6 +1,6 @@
 # Consys Experts — 需求書
 
-**文件版本**：v2.3
+**文件版本**：v2.4
 **狀態**：Draft
 **目標讀者**：架構師、開發者、產品負責人
 **改版說明**：
@@ -8,6 +8,7 @@
 - v2.1：明確 Expert 定義、引入 Harness Engineering 概念、repo 更名為 `consys-experts`、補充環境變數定義
 - v2.2：expert.json 加入 owner、環境變數統一 CONSYS_EXPERTS_ 前綴、Agent First 流程補充 clone 步驟、skill 名稱更新
 - v2.3：新增 Future Work（Security / Memory+Learn）、參考資料
+- v2.4：加入三階段演進願景、Expert 交接流程需求、本地三區記憶設計需求
 
 > **注意**：文件中所列的 expert、skill 名稱均為**示例**，用於說明命名規則與架構設計。實際規劃以團隊討論為準。
 
@@ -93,7 +94,42 @@
 
 ---
 
-### 1.5 設計決策的理由
+### 1.5 三階段演進願景
+
+本系統的設計以「逐步交還控制權給 Agent」為核心願景，共分三個階段演進：
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Stage 1：Expert 需要人類輔助（Human-Assisted）                      │
+│                                                                     │
+│  Agent 協助人類完成任務，高風險操作需人類確認（Human in the Loop）。   │
+│  Expert 之間的切換由人工執行（--switch）。                            │
+│  這是本系統的 Phase 1 目標（現在）。                                 │
+├─────────────────────────────────────────────────────────────────────┤
+│  Stage 2：部分 Expert 可獨立完成任務（Semi-Autonomous）               │
+│                                                                     │
+│  對於風險較低、流程明確的任務（如 build → CI），Expert 可自動執行       │
+│  完整流程，包含自動切換到下一個 Expert（根據 transitions 設定）。       │
+│  仍對高風險操作觸發 Human in the Loop。                              │
+│  需要成熟的記憶系統支撐（Local Memory + consys-memory）。             │
+├─────────────────────────────────────────────────────────────────────┤
+│  Stage 3：Expert 之間可互相溝通（Multi-Agent Collaboration）          │
+│                                                                     │
+│  多個 Expert 可平行運作，透過結構化 Hand-off 與共享記憶互相協調。       │
+│  例如 build-expert 發現問題後，主動通知 debug-expert 接手。            │
+│  Expert 可透過 framework-memory-tool 讀寫共用記憶區。                │
+│  這是本系統的長期目標，對應 ADK/SDK 的 Multi-Agent 架構。             │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**為什麼要定義三個階段**：
+- 讓團隊對「現在做什麼」與「未來走向哪裡」有共識
+- 記憶設計（本地三區）和交接流程設計，從 Stage 1 開始就要為 Stage 2/3 預留空間
+- 每個階段的技術投資都有意義：記憶收集的資料，未來可用於 Stage 3 的 Expert 協調
+
+---
+
+### 1.6 設計決策的理由
 
 | 設計決策 | 理由 |
 |---------|------|
@@ -516,6 +552,8 @@ git -C "$CONSYS_EXPERTS_MEMORY_PATH" push origin main
 
 ### FR-06：記憶系統（Workflow + 後臺）
 
+#### FR-06A：四個 Hook 存檔點
+
 | 編號 | 需求 | 優先級 | 理由 |
 |------|------|--------|------|
 | FR-06-1 | 本地記憶以 Markdown 為格式 | Must | 透明可編輯，無外部依賴 |
@@ -525,14 +563,30 @@ git -C "$CONSYS_EXPERTS_MEMORY_PATH" push origin main
 | FR-06-5 | `session-start` hook 載入上次摘要 + 偵測待接 hand-off | Must | 新 session 能延續上次工作 |
 | FR-06-6 | 記憶資料自動 push 到 `consys-memory` repo | Must | 後臺收集與跨裝置同步 |
 
-### FR-07：Hand-off 協議
+#### FR-06B：本地三區記憶（Local Three-Zone Memory）
+
+本地記憶存放於 `workspace/.claude/memory/`，分三個用途不同的區域，與遠端 `consys-memory` 後臺各司其職：
+
+| 編號 | 需求 | 優先級 | 理由 |
+|------|------|--------|------|
+| FR-06-7 | 建立 `memory/shared/` 區域（跨 Expert 共用知識） | Must | 儲存 project.md、conventions.md 等跨 Expert 都需要的知識，Expert 切換後仍可讀取 |
+| FR-06-8 | 建立 `memory/working/{expert}/` 區域（當前 Expert 的飛行中狀態） | Must | 儲存 in-flight 的工作日誌、決策記錄，Expert 切換時由 hand-off hook 清除（或歸檔），避免記憶污染 |
+| FR-06-9 | 建立 `memory/handoffs/{run-id}/` 區域（交接文件，寫入後唯讀） | Must | 壓縮摘要 < 2000 tokens，新 Expert 由 session-start hook 讀取，確保交接資訊完整傳遞 |
+| FR-06-10 | `session-start` hook 自動偵測 `memory/handoffs/` 是否有待接的 hand-off 文件 | Must | 新 Expert 啟動時不需人工操作即可拿到上一個 Expert 的交接內容 |
+| FR-06-11 | 週期性記憶整理（Periodic Collection）：每日或每週自動彙整本地記憶至 consys-memory | Should | 收集長期知識，供未來 framework-learn-expert 分析，但不造成即時系統負擔 |
+
+### FR-07：Hand-off 協議與 Expert 狀態機
 
 | 編號 | 需求 | 優先級 |
 |------|------|--------|
 | FR-07-1 | Hand-off 發生時機：切換 Expert 時（--switch）、session 結束時 | Must |
 | FR-07-2 | Hand-off 文件格式：YAML frontmatter + Markdown 摘要（< 2000 tokens）| Must |
 | FR-07-3 | 提供 `/handoff` 指令供同仁手動觸發 | Must |
-| FR-07-4 | Hand-off 文件存入 `consys-memory/employees/{id}/handoffs/` | Must |
+| FR-07-4 | Hand-off 文件同時存入本地 `memory/handoffs/{run-id}/`（當前 Expert 讀取用）及 `consys-memory/employees/{id}/handoffs/`（遠端備份） | Must |
+| FR-07-5 | `expert.json` 的 `transitions` 欄位定義 Expert 的狀態機轉移（事件 → 下一個 Expert） | Must |
+| FR-07-6 | 轉移事件（如 BUILD_SUCCESS / BUILD_FAILED）由 Expert 在工作完成後主動發出，觸發 hand-off 流程 | Must |
+| FR-07-7 | 若轉移目標為 `null`（如 BUILD_FAILED），表示需要人工介入，Expert 應提示同仁並等待 | Must |
+| FR-07-8 | Stage 2 未來：符合條件的 transitions 可自動觸發 install.sh --switch，無需人工操作 | Future |
 
 ### FR-08：後臺資料收集
 
