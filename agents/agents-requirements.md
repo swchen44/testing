@@ -1,11 +1,14 @@
 # Consys Experts — 需求書
 
-**文件版本**：v2.1
+**文件版本**：v2.2
 **狀態**：Draft
 **目標讀者**：架構師、開發者、產品負責人
 **改版說明**：
 - v2.0：以使用者故事為主軸重寫，記錄設計決策的「為什麼」
 - v2.1：明確 Expert 定義、引入 Harness Engineering 概念、repo 更名為 `consys-experts`、補充環境變數定義
+- v2.2：expert.json 加入 owner、環境變數統一 CONSYS_EXPERTS_ 前綴、Agent First 流程補充 clone 步驟、skill 名稱更新
+
+> **注意**：文件中所列的 expert、skill 名稱均為**示例**，用於說明命名規則與架構設計。實際規劃以團隊討論為準。
 
 ---
 
@@ -113,13 +116,17 @@
 
 **流程**：
 ```
-1. 同仁在 ~/workspace/ 執行 Claude Code
-2. 手動 clone consys-experts
-3. 查看 experts/ 下有哪些 Expert，選擇 build-expert
-4. 執行 source experts/build-expert/install.sh
-5. 開啟 Claude Code → 已具備 build-expert 的 Skills/Hooks/Commands
-6. 與 Claude 互動，Claude 協助用 repo tool 下載 fw 到 codespace/fw/
-7. 需要切換到 cicd-expert 時，執行 install.sh --switch，看到切換清單後確認
+0. 初始狀態：~/workspace/ 為空目錄
+1. 在 ~/workspace/ 執行：git clone {consys-experts-url}
+   → 出現 ~/workspace/consys-experts/
+2. 瀏覽 consys-experts/ 資料夾，找到所需 Expert（如 wifi/experts/wifi-build-expert/）
+3. 執行：source consys-experts/wifi/experts/wifi-build-expert/install.sh
+   → 建立 .claude/ symlinks、生成 CLAUDE.md、設定環境變數
+4. 開啟 Claude Code → 已具備 wifi-build-expert 的 Skills/Hooks/Commands
+5. 與 Claude 互動，Claude 協助用 repo tool 下載 fw 到 codespace/fw/
+6. 需要切換到 wifi-cicd-expert 時：
+   source consys-experts/wifi/experts/wifi-cicd-expert/install.sh --switch
+   確認變更清單後，重新開啟 Claude Code
 ```
 
 **驗收條件**：
@@ -148,7 +155,7 @@
 
 **驗收條件**：
 - install.sh 能自動偵測場景（legacy vs agent-first）
-- Legacy 場景的 `CONSYS_EXPERT_CODE_SPACE_PATH` 指向 workspace 根目錄
+- Legacy 場景的 `CONSYS_EXPERTS_CODE_SPACE_PATH` 指向 workspace 根目錄
 - 不影響已存在的 bora/ 資料夾與 .repo
 
 ---
@@ -320,7 +327,7 @@ workspace/                                       ← $CONSYS_EXPERTS_WORKSPACE_R
 ├── consys-memory/ (git)
 ├── CLAUDE.md
 ├── .claude/
-└── codespace/                                   ← $CONSYS_EXPERT_CODE_SPACE_PATH
+└── codespace/                                   ← $CONSYS_EXPERTS_CODE_SPACE_PATH
     └── fw/
         ├── .repo (git)
         └── bora/
@@ -337,7 +344,7 @@ workspace/
 ├── consys-memory/ (git)
 ├── CLAUDE.md
 ├── .claude/
-└── codespace/                                   ← $CONSYS_EXPERT_CODE_SPACE_PATH
+└── codespace/                                   ← $CONSYS_EXPERTS_CODE_SPACE_PATH
     ├── fw/                                      ← 第一套 firmware
     │   ├── .repo (git)
     │   └── bora/
@@ -392,7 +399,7 @@ workspace/
 （install.sh 偵測到根目錄有 `.repo`，自動判斷 legacy 場景）
 ```
 workspace/                                       ← $CONSYS_EXPERTS_WORKSPACE_ROOT_PATH
-│                                                   $CONSYS_EXPERT_CODE_SPACE_PATH（同一路徑）
+│                                                   $CONSYS_EXPERTS_CODE_SPACE_PATH（同一路徑）
 ├── .repo (git)
 ├── bora/
 │   ├── wifi/ (git)
@@ -428,7 +435,7 @@ workspace/                                       ← $CONSYS_EXPERTS_WORKSPACE_R
 |---|---|---|
 | Workspace root | `~/workspace/` | `~/workspace/` |
 | Code space | `~/workspace/codespace/` | `~/workspace/`（同 workspace root）|
-| `CONSYS_EXPERT_CODE_SPACE_PATH` | `~/workspace/codespace` | `~/workspace` |
+| `CONSYS_EXPERTS_CODE_SPACE_PATH` | `~/workspace/codespace` | `~/workspace` |
 | code 由誰下載 | Claude Expert 互動後用 repo tool 下載 | 同仁已手動下載 |
 | 場景自動偵測 | 根目錄無 `.repo` | 根目錄有 `.repo` |
 
@@ -467,22 +474,23 @@ workspace/                                       ← $CONSYS_EXPERTS_WORKSPACE_R
 ### FR-03：環境變數
 
 所有環境變數由 install.sh 透過 `source` 設定，可供 Expert 的 workflow、skill、tool 直接使用。
+**所有變數統一使用 `CONSYS_EXPERTS_` 前綴**。
 
 | 環境變數 | 說明 | Agent First 範例值 | Legacy 範例值 |
 |---------|------|-------------------|--------------|
 | `CONSYS_EXPERTS_PATH` | `consys-experts` repo 的路徑 | `~/workspace/consys-experts` | `~/workspace/consys-experts` |
-| `CONSYS_EXPERTS_WORKSPACE_ROOT_PATH` | 工作根目錄（Claude Code 執行的地方，`.claude/` 所在）| `~/workspace` | `~/workspace` |
-| `CONSYS_EXPERT_CODE_SPACE_PATH` | 程式碼路徑（source code repo 所在）| `~/workspace/codespace` | `~/workspace` |
-| `CONSYS_MEMORY_PATH` | `consys-memory` repo 的路徑 | `~/workspace/consys-memory` | `~/workspace/consys-memory` |
-| `CONSYS_EMPLOYEE_ID` | 員工工號（自動從 `git config user.name` 取得）| `john.doe` | `john.doe` |
+| `CONSYS_EXPERTS_WORKSPACE_ROOT_PATH` | 工作根目錄（`.claude/` 所在）| `~/workspace` | `~/workspace` |
+| `CONSYS_EXPERTS_CODE_SPACE_PATH` | 程式碼路徑（source code repo 所在）| `~/workspace/codespace` | `~/workspace` |
+| `CONSYS_EXPERTS_MEMORY_PATH` | `consys-memory` repo 的路徑 | `~/workspace/consys-memory` | `~/workspace/consys-memory` |
+| `CONSYS_EXPERTS_EMPLOYEE_ID` | 員工工號（自動從 `git config user.name` 取得）| `john.doe` | `john.doe` |
 
 **使用範例**（在 skill 或 hook 中）：
 ```bash
 # 在 skill 中引用 code space 路徑
-BUILD_DIR="$CONSYS_EXPERT_CODE_SPACE_PATH/fw/bora/build"
+BUILD_DIR="$CONSYS_EXPERTS_CODE_SPACE_PATH/fw/bora/build"
 
 # 在 hook 中推送記憶
-git -C "$CONSYS_MEMORY_PATH" push origin main
+git -C "$CONSYS_EXPERTS_MEMORY_PATH" push origin main
 ```
 
 ### FR-04：Skill 系統（Knowledge）
@@ -621,6 +629,6 @@ Phase 3：ADK/SDK（全自動）
 | Human in the Loop | 對高風險操作暫停等待人類確認的機制 |
 | `CONSYS_EXPERTS_PATH` | 指向 consys-experts repo 的環境變數 |
 | `CONSYS_EXPERTS_WORKSPACE_ROOT_PATH` | 工作根目錄（.claude/ 所在），兩個場景均為 workspace 根目錄 |
-| `CONSYS_EXPERT_CODE_SPACE_PATH` | 程式碼路徑（Agent First: codespace/；Legacy: workspace 根目錄）|
-| `CONSYS_MEMORY_PATH` | 指向 consys-memory repo 的環境變數 |
-| `CONSYS_EMPLOYEE_ID` | 員工工號，自動從 git config user.name 取得 |
+| `CONSYS_EXPERTS_CODE_SPACE_PATH` | 程式碼路徑（Agent First: codespace/；Legacy: workspace 根目錄）|
+| `CONSYS_EXPERTS_MEMORY_PATH` | 指向 consys-memory repo 的環境變數 |
+| `CONSYS_EXPERTS_EMPLOYEE_ID` | 員工工號，自動從 git config user.name 取得 |

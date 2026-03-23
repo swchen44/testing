@@ -1,8 +1,10 @@
 # Consys Experts — 設計書
 
-**文件版本**：v2.2
+**文件版本**：v2.3
 **狀態**：Draft
 **依據**：agents-requirements.md v2.1
+
+> **注意**：本文件中所列的 expert、skill 名稱均為**示例**，用於說明命名規則與架構設計。實際 expert 與 skill 的規劃以團隊討論為準。
 
 ---
 
@@ -189,35 +191,45 @@ consys-experts/
 | `knowhow` | 基礎知識與背景資料 | Wi-Fi 協定知識、SW/HW 架構、程式碼規則、linker script rule、rom/ram patch rule、decode coredump、symbol map |
 | `tool` | 外部工具的操作方法 | repo / gerrit 操作、preflight dashboard 查詢、tmux/ssh/uart/adb 控制裝置、AUTOTEST 操作、抓取 uart log、讀寫 Wiki / Gerrit / CR 系統 |
 
-**Skill 命名範例**：
+**Skill 命名範例**（以下為示例，非完整清單）：
+
 ```
+# framework domain（跨 domain 共用）
 framework-expert-discovery-knowhow   ← 有哪些 Expert 及各自能力
 framework-handoff-flow               ← 交接流程 SOP
 framework-memory-tool                ← consys-memory 操作
 
+# wifi domain
 wifi-protocol-knowhow                ← Wi-Fi 協定基礎知識
 wifi-arch-knowhow                    ← Wi-Fi SW/HW 架構
 wifi-coderule-knowhow                ← 程式碼撰寫規則
-wifi-build-flow                      ← 下載/編譯流程 SOP
+wifi-build-flow                      ← fw 下載/編譯流程 SOP
+wifi-drv-gen4m-build-flow            ← gen4m driver build 流程
 wifi-builderror-knowhow              ← 特殊 compile error 處理
 wifi-linkerscript-knowhow            ← Linker script 規則
 wifi-rompatch-knowhow                ← ROM/RAM patch 規則
 wifi-coredump-knowhow                ← Decode coredump 方法
 wifi-symbolmap-knowhow               ← Symbol map 解讀
 wifi-memory-knowhow                  ← 觀察 memory 使用
-wifi-gerrit-tool                     ← Gerrit 操作
-wifi-repo-tool                       ← Android repo tool 操作
 wifi-uart-tool                       ← 抓取 uart log
 wifi-adbshell-tool                   ← adb shell 控制
-wifi-preflight-tool                  ← Preflight dashboard 查詢
 wifi-autotest-tool                   ← AUTOTEST 平台操作
+wifi-cicd-flow                       ← CI/CD 流程 SOP
 
+# bt domain
 bt-protocol-knowhow
-bt-coredump-knowhow
-bt-gerrit-tool
+bt-arch-knowhow
+bt-coderule-knowhow                  ← bt 程式碼撰寫規則
+bt-build-flow
+bt-fw-build-flow                     ← bt fw 完整 build 流程
 
+# system domain（跨 wifi/bt/system 共用工具）
+system-gerrit-tool                   ← Gerrit 操作（原 wifi-gerrit-tool）
+system-repo-multi-repo-tool          ← Android repo / multi-repo 操作（原 wifi-repo-tool）
+system-preflight-tool                ← Preflight dashboard 查詢（原 wifi-preflight-tool）
+system-core-tracer-gdb-tool          ← CoreTracer / GDB 工具操作
+system-device-tool                   ← 裝置控制（tmux/ssh/uart/adb）
 system-cicd-tool
-system-device-tool                   ← 裝置控制（tmux/ssh/uart）
 ```
 
 **Command 命名規則**（同 Skill，type 固定為 `tool`）：
@@ -305,33 +317,32 @@ consys-experts/ (git)
 │
 ├── wifi/
 │   ├── experts/
-│   │   ├── wifi-common-expert/              ← wifi domain 共用（install.sh 無作用）
+│   │   ├── wifi-common-expert/              ← wifi domain 共用（install.sh 無作用）【示例】
 │   │   │   ├── README.md
 │   │   │   ├── install.sh                   ← 無作用
 │   │   │   ├── expert.json
 │   │   │   ├── skills/
-│   │   │   │   ├── wifi-protocol-knowhow/
+│   │   │   │   ├── wifi-protocol-knowhow/   ← Wi-Fi 協定基礎知識
 │   │   │   │   │   └── SKILL.md
-│   │   │   │   ├── wifi-arch-knowhow/
+│   │   │   │   ├── wifi-arch-knowhow/       ← SW/HW 架構知識
 │   │   │   │   │   └── SKILL.md
-│   │   │   │   ├── wifi-coderule-knowhow/
-│   │   │   │   │   └── SKILL.md
-│   │   │   │   ├── wifi-gerrit-tool/
-│   │   │   │   │   └── SKILL.md
-│   │   │   │   └── wifi-repo-tool/
+│   │   │   │   └── wifi-coderule-knowhow/   ← 程式碼撰寫規則
 │   │   │   │       └── SKILL.md
+│   │   │   │   # 注：gerrit/repo/preflight 工具移至 system domain
 │   │   │   ├── hooks/                       ← wifi 專屬 hooks（可選）
 │   │   │   ├── commands/
 │   │   │   ├── unittest/
 │   │   │   └── report/
 │   │   │
-│   │   ├── wifi-build-expert/
+│   │   ├── wifi-build-expert/               ← 【示例】
 │   │   │   ├── README.md
 │   │   │   ├── install.sh                   ← 依 expert.json 安裝三層 symlinks
 │   │   │   ├── expert.json
 │   │   │   ├── CLAUDE.md
 │   │   │   ├── skills/
-│   │   │   │   ├── wifi-build-flow/
+│   │   │   │   ├── wifi-build-flow/         ← fw build 流程 SOP
+│   │   │   │   │   └── SKILL.md
+│   │   │   │   ├── wifi-drv-gen4m-build-flow/ ← gen4m driver build 流程
 │   │   │   │   │   └── SKILL.md
 │   │   │   │   ├── wifi-builderror-knowhow/
 │   │   │   │   │   └── SKILL.md
@@ -367,7 +378,7 @@ consys-experts/ (git)
 │   │   │   ├── unittest/
 │   │   │   └── report/
 │   │   │
-│   │   └── wifi-cicd-expert/
+│   │   └── wifi-cicd-expert/                ← 【示例】
 │   │       ├── README.md
 │   │       ├── install.sh
 │   │       ├── expert.json
@@ -375,10 +386,9 @@ consys-experts/ (git)
 │   │       ├── skills/
 │   │       │   ├── wifi-cicd-flow/
 │   │       │   │   └── SKILL.md
-│   │       │   ├── wifi-preflight-tool/
-│   │       │   │   └── SKILL.md
-│   │       │   └── wifi-autotest-tool/
+│   │       │   └── wifi-autotest-tool/      ← AUTOTEST 平台操作
 │   │       │       └── SKILL.md
+│   │       │   # 注：preflight 工具移至 system domain
 │   │       ├── hooks/
 │   │       ├── commands/
 │   │       ├── unittest/
@@ -388,7 +398,7 @@ consys-experts/ (git)
 │
 ├── bt/
 │   ├── experts/
-│   │   ├── bt-common-expert/
+│   │   ├── bt-common-expert/                ← bt domain 共用【示例】
 │   │   │   ├── README.md
 │   │   │   ├── install.sh                   ← 無作用
 │   │   │   ├── expert.json
@@ -397,38 +407,46 @@ consys-experts/ (git)
 │   │   │   │   │   └── SKILL.md
 │   │   │   │   ├── bt-arch-knowhow/
 │   │   │   │   │   └── SKILL.md
-│   │   │   │   └── bt-gerrit-tool/
+│   │   │   │   └── bt-coderule-knowhow/     ← bt 程式碼撰寫規則
 │   │   │   │       └── SKILL.md
+│   │   │   │   # 注：bt-coredump-knowhow / bt-gerrit-tool 已移除
+│   │   │   │   # 注：gerrit 工具改由 system-gerrit-tool 提供
 │   │   │   ├── hooks/
 │   │   │   ├── commands/
 │   │   │   ├── unittest/
 │   │   │   └── report/
-│   │   ├── bt-build-expert/
+│   │   ├── bt-build-expert/                 ← 【示例】
 │   │   │   ├── skills/
 │   │   │   │   ├── bt-build-flow/
 │   │   │   │   │   └── SKILL.md
-│   │   │   │   └── bt-coredump-knowhow/
+│   │   │   │   └── bt-fw-build-flow/        ← bt fw 完整 build 流程
 │   │   │   │       └── SKILL.md
 │   │   │   ├── hooks/ ├── commands/ ├── unittest/ └── report/
-│   │   └── bt-debug-expert/
+│   │   └── bt-debug-expert/                 ← 【示例】
 │   │       ├── skills/ ├── hooks/ ├── commands/ ├── unittest/ └── report/
 │   └── external-experts/
 │
 └── system/
     ├── experts/
-    │   ├── system-common-expert/
+    │   ├── system-common-expert/            ← system domain 共用（含跨 domain 工具）【示例】
     │   │   ├── README.md
     │   │   ├── install.sh                   ← 無作用
     │   │   ├── expert.json
     │   │   ├── skills/
-    │   │   │   ├── system-device-tool/      ← tmux/ssh/uart/adb 控制
+    │   │   │   ├── system-gerrit-tool/      ← Gerrit 操作（原 wifi-gerrit-tool）
     │   │   │   │   └── SKILL.md
-    │   │   │   └── system-cicd-tool/
+    │   │   │   ├── system-repo-multi-repo-tool/ ← Android repo / multi-repo 操作（原 wifi-repo-tool）
+    │   │   │   │   └── SKILL.md
+    │   │   │   ├── system-preflight-tool/   ← Preflight dashboard 查詢（原 wifi-preflight-tool）
+    │   │   │   │   └── SKILL.md
+    │   │   │   ├── system-core-tracer-gdb-tool/ ← CoreTracer / GDB 工具操作
+    │   │   │   │   └── SKILL.md
+    │   │   │   └── system-device-tool/      ← tmux/ssh/uart/adb 裝置控制
     │   │   │       └── SKILL.md
     │   │   ├── hooks/ ├── commands/ ├── unittest/ └── report/
-    │   ├── system-cicd-expert/
+    │   ├── system-cicd-expert/              ← 【示例】
     │   │   ├── skills/ ├── hooks/ ├── commands/ ├── unittest/ └── report/
-    │   └── system-device-expert/
+    │   └── system-device-expert/            ← 【示例】
     │       ├── skills/ ├── hooks/ ├── commands/ ├── unittest/ └── report/
     └── external-experts/
 ```
@@ -444,6 +462,7 @@ consys-experts/ (git)
   "name": "wifi-build-expert",
   "display_name": "WiFi Build Expert",
   "domain": "wifi",
+  "owner": "wifi-team",
   "description": "專門處理 Wi-Fi 韌體下載、編譯與 build error 排查",
   "version": "1.0.0",
   "triggers": ["build", "compile", "編譯", "BUILD_FAILED"],
@@ -588,20 +607,21 @@ Commands 變更：
 
 ## 6. 環境變數設計
 
-install.sh 透過 `source` 設定，供所有 Expert 的 workflow / tool / knowledge 使用：
+install.sh 透過 `source` 設定，供所有 Expert 的 workflow / tool / knowledge 使用。
+所有變數統一使用 `CONSYS_EXPERTS_` 前綴：
 
 ```bash
-export CONSYS_EXPERTS_PATH="..."              # consys-experts repo 路徑
-export CONSYS_EXPERTS_WORKSPACE_ROOT_PATH="$(pwd)"   # workspace 根目錄（.claude/ 所在）
-export CONSYS_EXPERT_CODE_SPACE_PATH="..."   # 程式碼路徑（agent-first: codespace/；legacy: workspace root）
-export CONSYS_MEMORY_PATH="$(pwd)/consys-memory"     # consys-memory repo 路徑
-export CONSYS_EMPLOYEE_ID="$(git config user.name)"  # 員工工號
+export CONSYS_EXPERTS_PATH="..."                              # consys-experts repo 路徑
+export CONSYS_EXPERTS_WORKSPACE_ROOT_PATH="$(pwd)"           # workspace 根目錄（.claude/ 所在）
+export CONSYS_EXPERTS_CODE_SPACE_PATH="..."                  # 程式碼路徑（agent-first: codespace/；legacy: workspace root）
+export CONSYS_EXPERTS_MEMORY_PATH="$(pwd)/consys-memory"     # consys-memory repo 路徑
+export CONSYS_EXPERTS_EMPLOYEE_ID="$(git config user.name)"  # 員工工號
 ```
 
 | 變數 | Agent First | Legacy |
 |------|-------------|--------|
 | `CONSYS_EXPERTS_WORKSPACE_ROOT_PATH` | `~/workspace` | `~/workspace` |
-| `CONSYS_EXPERT_CODE_SPACE_PATH` | `~/workspace/codespace` | `~/workspace` |
+| `CONSYS_EXPERTS_CODE_SPACE_PATH` | `~/workspace/codespace` | `~/workspace` |
 
 ---
 
@@ -623,7 +643,7 @@ tags: [internal, private]
 ## 步驟 1：下載程式碼
 使用 Android repo tool：
 ```bash
-cd $CONSYS_EXPERT_CODE_SPACE_PATH
+cd $CONSYS_EXPERTS_CODE_SPACE_PATH
 mkdir fw && cd fw
 repo init -u {manifest-url} -m {manifest.xml}
 repo sync -j8
@@ -670,7 +690,7 @@ build, compile, 編譯, BUILD_FAILED
 
 ## 環境資訊
 - Workspace: $CONSYS_EXPERTS_WORKSPACE_ROOT_PATH
-- Code Space: $CONSYS_EXPERT_CODE_SPACE_PATH
+- Code Space: $CONSYS_EXPERTS_CODE_SPACE_PATH
 
 ## 個人客製化
 如需客製化，請建立 `.claude/expert.local.md`（不納入 repo）。
@@ -727,7 +747,7 @@ employee_id: john.doe
 成功編譯 bora fw，make all 通過，artifact 位於 fw/bora/build/out/。
 
 ## 關鍵發現
-- 編譯指令：`make -C $CONSYS_EXPERT_CODE_SPACE_PATH/fw/bora/build all -j8`
+- 編譯指令：`make -C $CONSYS_EXPERTS_CODE_SPACE_PATH/fw/bora/build all -j8`
 - 輸出目錄：`fw/bora/build/out/`
 - 特別注意：需先 source setup.sh
 
@@ -794,5 +814,5 @@ metadata:
 | `tool` skill | 外部工具的操作方法 |
 | Layer 1-5 | consys-experts 的五層資料夾命名規則 |
 | `CONSYS_EXPERTS_WORKSPACE_ROOT_PATH` | workspace 根目錄，`.claude/` 所在 |
-| `CONSYS_EXPERT_CODE_SPACE_PATH` | 程式碼路徑（兩個場景值不同） |
+| `CONSYS_EXPERTS_CODE_SPACE_PATH` | 程式碼路徑（兩個場景值不同） |
 | Human in the Loop | 對高風險操作暫停等待人類確認的機制 |
