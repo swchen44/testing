@@ -1,12 +1,13 @@
 # Consys Experts — 需求書
 
-**文件版本**：v2.2
+**文件版本**：v2.3
 **狀態**：Draft
 **目標讀者**：架構師、開發者、產品負責人
 **改版說明**：
 - v2.0：以使用者故事為主軸重寫，記錄設計決策的「為什麼」
 - v2.1：明確 Expert 定義、引入 Harness Engineering 概念、repo 更名為 `consys-experts`、補充環境變數定義
 - v2.2：expert.json 加入 owner、環境變數統一 CONSYS_EXPERTS_ 前綴、Agent First 流程補充 clone 步驟、skill 名稱更新
+- v2.3：新增 Future Work（Security / Memory+Learn）、參考資料
 
 > **注意**：文件中所列的 expert、skill 名稱均為**示例**，用於說明命名規則與架構設計。實際規劃以團隊討論為準。
 
@@ -632,3 +633,79 @@ Phase 3：ADK/SDK（全自動）
 | `CONSYS_EXPERTS_CODE_SPACE_PATH` | 程式碼路徑（Agent First: codespace/；Legacy: workspace 根目錄）|
 | `CONSYS_EXPERTS_MEMORY_PATH` | 指向 consys-memory repo 的環境變數 |
 | `CONSYS_EXPERTS_EMPLOYEE_ID` | 員工工號，自動從 git config user.name 取得 |
+
+---
+
+## 9. Future Work
+
+### FW-01：Security — Expert 安全審計機制
+
+**背景**：
+
+AI Agent 生態系統的安全威脅已有實際案例：
+- 2026 年 1 月，主要 Agent 技能市場中 **12%（341/2,857）為惡意技能**
+- CVSS 8.8 的 CVE 暴露了 **17,500+ 個面向網路的實例**
+- Moltbook 漏洞跨 770,000 個 Agent 洩露了 **150 萬個 API token**
+
+目前同仁在安裝 external-experts、連接 MCP 伺服器、設定 hooks 時，沒有任何自動化安全審計機制。
+
+**需求**：
+
+| 編號 | 需求 | 優先級 |
+|------|------|--------|
+| FW-01-1 | 建立 `framework-security-expert`，提供自動化安全審計能力 | Future |
+| FW-01-2 | 提供 pre-install hook，在安裝 external-experts 前自動掃描 | Future |
+| FW-01-3 | 靜態分析 SKILL.md / COMMAND.md，偵測 prompt injection 與資料外洩指令 | Future |
+| FW-01-4 | 掃描 hooks（.js）是否有可疑網路呼叫或非預期檔案讀寫 | Future |
+| FW-01-5 | 產生安全掃描報告，更新至 `report/execution-report.md` | Future |
+
+**參考實作**：[AgentShield](https://github.com/affaan-m/agentshield)
+
+---
+
+### FW-02：Memory + Learn — 自我檢討的 Expert
+
+**背景**：
+
+目前 Expert 的 knowledge（SKILL.md）是靜態的，由人工撰寫與維護。隨著 consys-memory 累積越來越多的使用記錄，有機會讓 Expert 從記憶中自動學習，持續改善自己的 skills。
+
+**設計方向**：
+```
+使用記憶（sessions/ + handoffs/）
+    → framework-learn-expert 分析
+    → 找出 pattern（常見錯誤、成功解法）
+    → 自動產生/更新 SKILL.md
+    → PR → 人工 review → merge → 所有人受益
+```
+
+**需求**：
+
+| 編號 | 需求 | 優先級 |
+|------|------|--------|
+| FW-02-1 | `framework-learn-expert` 能定期分析 consys-memory 的 session 記錄 | Future |
+| FW-02-2 | 從記憶中萃取重複出現的問題與解法，產生 knowhow skill 草稿 | Future |
+| FW-02-3 | 自動建立 PR，由人工 review 後合入 consys-experts repo | Future |
+| FW-02-4 | 實現完整的 `Think → Plan → Act → Learn` 循環 | Future |
+
+**參考實作**：[claude-mem](https://github.com/thedotmack/claude-mem)
+
+---
+
+## 10. 參考資料
+
+### 核心概念
+
+| 資料 | 說明 |
+|------|------|
+| [Harness Engineering（Martin Fowler Blog）](https://martinfowler.com/articles/exploring-gen-ai/harness-engineering.html) | 本系統架構核心啟發 |
+| [AgentShield](https://github.com/affaan-m/agentshield) | Agent 安全審計參考實作（FW-01）|
+| [claude-memory-engine](https://github.com/HelloRuru/claude-memory-engine) | Hooks 設計參考，8-step 學習循環 |
+| [claude-mem](https://github.com/thedotmack/claude-mem) | 輕量記憶系統，memory → learn 參考（FW-02）|
+
+### 延伸閱讀（個人知識庫，連結待更新為個人網站）
+
+| 資料 | 說明 |
+|------|------|
+| [Lessons from Building Claude Code — How We Use Skills](https://github.com/swchen44/personal-knowledge-base-from-ai/blob/main/AI/2026-03-17-LESSONS-FROM-BUILDING-CLAUDE-CODE-HOW-WE-USE-SKILLS.md) | 實戰經驗：Claude Code 中 Skills 的使用心得 |
+| [5 Agent Skill Design Patterns Every ADK Developer Should Know](https://github.com/swchen44/personal-knowledge-base-from-ai/blob/main/AI/2026-03-18-5-AGENT-SKILL-DESIGN-PATTERNS-EVERY-ADK-DEVELOPER-SHOULD-KNOW.md) | ADK 開發者必知的 5 種 Skill 設計模式 |
+| [Claude-mem Code Analysis](https://github.com/swchen44/personal-knowledge-base-from-ai/blob/main/CodeAnalysis/2025-08-31-CLAUDE-MEM-CODE-ANALYSIS.md) | claude-mem 原始碼深度分析 |

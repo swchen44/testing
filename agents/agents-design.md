@@ -1,6 +1,6 @@
 # Consys Experts — 設計書
 
-**文件版本**：v2.3
+**文件版本**：v2.4
 **狀態**：Draft
 **依據**：agents-requirements.md v2.1
 
@@ -816,3 +816,131 @@ metadata:
 | `CONSYS_EXPERTS_WORKSPACE_ROOT_PATH` | workspace 根目錄，`.claude/` 所在 |
 | `CONSYS_EXPERTS_CODE_SPACE_PATH` | 程式碼路徑（兩個場景值不同） |
 | Human in the Loop | 對高風險操作暫停等待人類確認的機制 |
+
+---
+
+## 14. Future Work
+
+### 14.1 Security：Expert 安全審計機制
+
+**動機**：
+
+AI Agent 生態系統的成長速度遠超其安全工具：
+- 2026 年 1 月，一個主要 Agent 技能市場的 **12% 技能為惡意**（2,857 個社區技能中有 341 個惡意）
+- 一個 **CVSS 8.8** 的 CVE 暴露了 17,500+ 個面向網路的實例
+- Moltbook 漏洞跨 770,000 個 Agent 洩露了 **150 萬個 API token**
+
+**現況問題**：
+
+同仁在安裝社區技能（external-experts）、連接 MCP 伺服器、配置 hooks 時，沒有任何自動化方式來審計設定的安全性。
+
+**目標**：
+
+建立 `framework-security-expert`，提供以下能力：
+
+```
+framework/experts/
+└── framework-security-expert/
+    ├── skills/
+    │   ├── framework-security-audit-flow/     ← 審計流程 SOP
+    │   │   └── SKILL.md
+    │   ├── framework-skill-scan-tool/         ← 掃描已安裝 skills 的安全性
+    │   │   └── SKILL.md
+    │   ├── framework-hook-scan-tool/          ← 掃描 hooks 是否有惡意行為
+    │   │   └── SKILL.md
+    │   └── framework-supply-chain-knowhow/    ← 供應鏈攻擊知識
+    │       └── SKILL.md
+    ├── hooks/
+    │   └── pre-install-check.js               ← 安裝前自動掃描
+    ├── commands/
+    │   └── framework-security-audit-tool/     ← /security-audit 指令
+    │       └── COMMAND.md
+    ├── unittest/
+    └── report/
+```
+
+**設計方向**（參考 AgentShield）：
+
+| 功能 | 說明 |
+|------|------|
+| 靜態分析 | 掃描 SKILL.md / COMMAND.md 是否有 prompt injection、資料外洩指令 |
+| Hook 掃描 | 檢查 `.js` hooks 是否有可疑的網路呼叫、檔案讀寫 |
+| External 審計 | 安裝 external-experts 前，比對已知惡意 skill fingerprint |
+| Pre-install hook | 在 install.sh 執行前觸發安全檢查，阻止高風險安裝 |
+| 報告產生 | 自動更新 `report/execution-report.md`，記錄安全掃描結果 |
+
+**參考實作**：[AgentShield](https://github.com/affaan-m/agentshield)
+
+---
+
+### 14.2 Memory + Learn：自我檢討的 Expert
+
+**動機**：
+
+目前 Expert 的 knowledge（SKILL.md）是靜態的，由人工撰寫和維護。未來希望 Expert 能**從使用記憶中自動學習**，持續改善自己的 skills。
+
+**設計方向**：
+
+```
+使用記憶（consys-memory/employees/{id}/sessions/）
+    ↓ framework-learn-expert 分析
+找出 pattern（常見錯誤、成功解法、反覆遇到的問題）
+    ↓
+自動產生或更新 SKILL.md（howknow / flow 類型）
+    ↓
+framework-skill-create-expert 驗證格式
+    ↓
+PR 給人工 review → merge → 所有人受益
+```
+
+**三個層次的記憶演進**：
+
+| 層次 | 機制 | 實作 |
+|------|------|------|
+| **短期**：session 記憶 | session-end hook 自動儲存 | 已實作（claude-memory-engine 模式）|
+| **中期**：跨 session 學習 | framework-learn-expert 定期分析 sessions/ | 未來工作 |
+| **長期**：知識固化 | 分析結果→新增/更新 SKILL.md→PR | 未來工作 |
+
+**`framework-learn-expert` 強化方向**：
+
+```
+framework/experts/framework-learn-expert/skills/
+├── framework-learn-flow/           ← 分析記憶→找 pattern 的 SOP
+│   └── SKILL.md
+├── framework-feedback-knowhow/     ← 如何從錯誤記錄中萃取知識
+│   └── SKILL.md
+└── framework-skill-improve-flow/   ← 自動產生 skill PR 的流程（新增）
+    └── SKILL.md
+```
+
+**目標效果**：Expert 不只是靜態知識庫，而是能透過累積的使用資料**持續自我強化**的系統，實現真正的 `Think → Plan → Act → Learn` 循環。
+
+**參考實作**：[claude-mem](https://github.com/thedotmack/claude-mem)
+
+---
+
+## 15. 參考資料
+
+### 核心概念
+
+| 資料 | 說明 |
+|------|------|
+| [Harness Engineering（Martin Fowler Blog）](https://martinfowler.com/articles/exploring-gen-ai/harness-engineering.html) | 本系統架構的核心啟發：為 AI 打造自動化治理體系 |
+| [AgentShield](https://github.com/affaan-m/agentshield) | Agent 生態系統安全審計參考實作 |
+| [claude-memory-engine](https://github.com/HelloRuru/claude-memory-engine) | 8-step 學習循環記憶引擎，hooks 設計參考 |
+| [claude-mem](https://github.com/thedotmack/claude-mem) | 輕量記憶系統，memory → learn 機制參考 |
+
+### 技術文件
+
+| 資料 | 說明 |
+|------|------|
+| [Claude Plugin 文件](https://code.claude.com/docs/en/plugins) | Expert 資料夾結構參考（skills/hooks/commands 格式）|
+| [Agent Skills Overview](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview) | Skill 資料夾設計參考 |
+
+### 延伸閱讀（個人知識庫，連結待更新）
+
+| 資料 | 說明 |
+|------|------|
+| [Lessons from Building Claude Code — How We Use Skills](https://github.com/swchen44/personal-knowledge-base-from-ai/blob/main/AI/2026-03-17-LESSONS-FROM-BUILDING-CLAUDE-CODE-HOW-WE-USE-SKILLS.md) | 實戰經驗：Claude Code 中 Skills 的使用心得 |
+| [5 Agent Skill Design Patterns Every ADK Developer Should Know](https://github.com/swchen44/personal-knowledge-base-from-ai/blob/main/AI/2026-03-18-5-AGENT-SKILL-DESIGN-PATTERNS-EVERY-ADK-DEVELOPER-SHOULD-KNOW.md) | ADK 開發者必知的 5 種 Skill 設計模式 |
+| [Claude-mem Code Analysis](https://github.com/swchen44/personal-knowledge-base-from-ai/blob/main/CodeAnalysis/2025-08-31-CLAUDE-MEM-CODE-ANALYSIS.md) | claude-mem 原始碼深度分析 |
