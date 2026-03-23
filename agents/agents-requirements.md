@@ -569,7 +569,7 @@ git -C "$CONNSYS_EXPERTS_MEMORY_PATH" push origin main
 | FR-04-9 | Skill `report/` 記錄執行過程、結果、token 用量 | Should | 追蹤 Skill 品質與 AI 成本 |
 | FR-04-10 | Skill 內的 script 語言優先順序：**Shell（預設）→ Python（複雜邏輯）**，與 hook 策略一致 | Must | 一致的語言策略降低維護認知負擔 |
 | FR-04-11 | Skill / Hook 內的所有 **Python 腳本須採用 PEP 723 Inline Script Metadata**，在腳本頂端宣告 `requires-python` 與 `dependencies` | Must | 免除 `requirements.txt` 與 venv 管理；每個腳本自帶依賴宣告，可直接用 `uv run` 執行；參考：[PEP 723](https://peps.python.org/pep-0723/) |
-| FR-04-12 | pytest `test_xxx.py` 放置於 skill 的 `test/` 資料夾，測試資料用 `test-data.json` 或 `conftest.py` 管理 | Should | 標準化測試目錄，CI 可直接 `pytest test/` 執行 |
+| FR-04-12 | pytest `test_xxx.py` 放置於 skill 的 `test/` 資料夾，測試資料用 `test-data.json` 或 `conftest.py` 管理；執行 pytest 時**優先使用 `uvx pytest`**，可與 `uv run` 共用同一 Python 版本，避免環境不一致 | Should | 標準化測試目錄，CI 可直接 `uvx pytest test/` 執行；`uvx` 確保 pytest 與腳本使用相同 Python 版本 |
 
 ### FR-05：CLAUDE.md 生成機制
 

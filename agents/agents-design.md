@@ -1,6 +1,6 @@
 # Consys Experts — 設計書
 
-**文件版本**：v2.9
+**文件版本**：v2.10
 **狀態**：Draft
 **依據**：agents-requirements.md v2.8
 
@@ -28,60 +28,9 @@
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 1.2 Script 實作語言優先策略（Hooks + Skill Scripts）
+### 1.2 Script 實作語言優先策略
 
-適用範圍：所有 Hook（`hooks/`）與 Skill 內的可執行腳本（`test/`、helper scripts）。
-
-```
-優先順序：Shell（預設）→ Python（複雜邏輯）→ JS（OpenClaw 遷移備用）
-
-判斷原則：
-  ① 能用 Shell 解決的，就用 Shell
-     - 適合：git 操作、檔案讀寫、環境變數、簡單字串處理、基本功能驗證
-     - 優點：所有開發環境普遍存在，無需額外 runtime，韌體工程師熟悉
-
-  ② Shell 難以維護時，改用 Python
-     - 適合：JSON/YAML 解析、複雜字串處理、API 呼叫、跨平台邏輯、unit test
-     - 優點：韌體團隊的第二語言，函式庫豐富（GitPython、requests、pyyaml）
-     - 慣例：Shell hook 以 subprocess 呼叫 Python helper（同名 .py 檔）
-
-  ③ JS 為最後考慮，保留作為 OpenClaw 遷移路徑
-     - 適合：Phase 2 OpenClaw 遷移時，TypeScript 重寫的過渡期
-     - 原則：Phase 1 不主動新增 JS hooks
-```
-
-**Python 腳本強制規範：PEP 723 Inline Script Metadata**
-
-所有 Python 腳本（hooks helper、skill scripts、test files）**必須**在檔案頂端宣告 inline metadata：
-
-```python
-# /// script
-# requires-python = ">=3.11"
-# dependencies = [
-#   "pyyaml>=6.0",
-#   "requests>=2.31",
-# ]
-# ///
-```
-
-| 好處 | 說明 |
-|------|------|
-| **零 venv 管理** | 不需 `requirements.txt`、不需建 venv，依賴宣告在腳本本身 |
-| **直接執行** | `uv run script.py` 自動安裝依賴並執行 |
-| **自帶文件** | 查看腳本即知依賴版本，降低環境不一致問題 |
-| **CI 友善** | CI 環境只需安裝 `uv`，不需管理每個 skill 的 venv |
-
-參考：[PEP 723 — Inline script metadata](https://peps.python.org/pep-0723/)
-
-**檔案命名慣例**：
-
-| 情況 | 命名 | 範例 |
-|------|------|------|
-| 純 Shell hook | `{name}.sh` | `session-start.sh` |
-| Shell + Python helper | `{name}.sh` + `{name}-helper.py` | `session-end.sh` + `session-end-helper.py` |
-| 複雜邏輯獨立為 Python | `{name}.py`（由 Shell wrapper 呼叫）| `compress-memory.py` |
-| Skill 基本測試 | `test-basic.sh` | Shell 驗證 skill 主要功能 |
-| Skill pytest | `test_{name}.py` | Python unit test，放 `test/` 下 |
+詳見 [§8 Script 實作語言優先策略](#8-script-實作語言優先策略)。
 
 ### 1.3 Consys Expert 組成
 
@@ -767,11 +716,49 @@ repo sync -j8
 
 ---
 
-## 8. Python Script 規範（PEP 723）
+## 8. Script 實作語言優先策略
+
+適用範圍：所有 Hook（`hooks/`）與 Skill 內的可執行腳本（`test/`、helper scripts）。
+
+### 8.1 語言優先順序
+
+```
+優先順序：Shell（預設）→ Python（複雜邏輯）→ JS（OpenClaw 遷移備用）
+
+判斷原則：
+  ① 能用 Shell 解決的，就用 Shell
+     - 適合：git 操作、檔案讀寫、環境變數、簡單字串處理、基本功能驗證
+     - 優點：所有開發環境普遍存在，無需額外 runtime，韌體工程師熟悉
+
+  ② Shell 難以維護時，改用 Python
+     - 適合：JSON/YAML 解析、複雜字串處理、API 呼叫、跨平台邏輯、unit test
+     - 優點：韌體團隊的第二語言，函式庫豐富（GitPython、requests、pyyaml）
+     - 慣例：Shell hook 以 subprocess 呼叫 Python helper（同名 .py 檔）
+
+  ③ JS 為最後考慮，保留作為 OpenClaw 遷移路徑
+     - 適合：Phase 2 OpenClaw 遷移時，TypeScript 重寫的過渡期
+     - 原則：Phase 1 不主動新增 JS hooks
+```
+
+### 8.2 檔案命名慣例
+
+| 情況 | 命名 | 範例 |
+|------|------|------|
+| 純 Shell hook | `{name}.sh` | `session-start.sh` |
+| Shell + Python helper | `{name}.sh` + `{name}-helper.py` | `session-end.sh` + `session-end-helper.py` |
+| 複雜邏輯獨立為 Python | `{name}.py`（由 Shell wrapper 呼叫）| `compress-memory.py` |
+| Skill 基本測試 | `test-basic.sh` | Shell 驗證 skill 主要功能 |
+| Skill pytest | `test_{name}.py` | Python unit test，放 `test/` 下 |
+
+### 8.3 Python 規範：PEP 723
 
 所有 Hook helper 與 Skill 內的 Python 腳本，**強制採用 PEP 723 Inline Script Metadata**。
 
-### 8.1 標準模板
+> **stdlib 優先原則**：儘量使用 Python 標準內建 library（`os`、`pathlib`、`json`、`subprocess` 等），減少 `dependencies` 欄位的外部套件，讓使用者可直接 `uv run` 一鍵執行，無需等待大量套件安裝。
+
+參考：[PEP 723 — Inline script metadata](https://peps.python.org/pep-0723/)
+
+#### 標準模板
 
 ```python
 # /// script
@@ -792,7 +779,14 @@ if __name__ == "__main__":
     main()
 ```
 
-### 8.2 執行方式
+| 好處 | 說明 |
+|------|------|
+| **零 venv 管理** | 不需 `requirements.txt`、不需建 venv，依賴宣告在腳本本身 |
+| **直接執行** | `uv run script.py` 自動安裝依賴並執行 |
+| **自帶文件** | 查看腳本即知依賴版本，降低環境不一致問題 |
+| **CI 友善** | CI 環境只需安裝 `uv`，不需管理每個 skill 的 venv |
+
+#### 執行方式
 
 | 方式 | 指令 | 說明 |
 |------|------|------|
@@ -802,7 +796,7 @@ if __name__ == "__main__":
 
 > 安裝 `uv`：`curl -LsSf https://astral.sh/uv/install.sh | sh`
 
-### 8.3 Skill pytest 範例（test_xxx.py）
+### 8.4 Skill pytest 範例（test_xxx.py）
 
 ```python
 # test/test_wifi_build_flow.py
@@ -838,7 +832,7 @@ def test_output_dir_path():
     assert "build/out" in path
 ```
 
-### 8.4 Hook Python Helper 範例（含 PEP 723）
+### 8.5 Hook Python Helper 範例（含 PEP 723）
 
 更新後的 `memory-helper.py`（由 `session-end.sh` 呼叫）：
 
