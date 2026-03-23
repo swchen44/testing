@@ -1,6 +1,6 @@
 # Consys Experts — 需求書
 
-**文件版本**：v2.8
+**文件版本**：v2.9
 **狀態**：Draft
 **目標讀者**：架構師、開發者、產品負責人
 **改版說明**：
@@ -13,6 +13,7 @@
 - v2.6：Hook 實作語言改為 Shell 優先，複雜邏輯用 Python，JS 為最後考慮
 - v2.7：專案更名 consys → connsys（雙 n），更新所有 repo/env var 名稱
 - v2.8：Skill/Hook scripts Shell 優先、Python 採 PEP 723 inline metadata、pytest test_xxx.py
+- v2.9：多 Expert 安裝/卸載需求、install.sh --doctor、Python 版本檢查、Skill 與 Command 邊界釐清、限制補充（Skill 版本相容性、memory GC）、Future Work 補充（registry.json、Skill README 範本）
 
 > **注意**：文件中所列的 expert、skill 名稱均為**示例**，用於說明命名規則與架構設計。實際規劃以團隊討論為準。
 
@@ -531,6 +532,10 @@ workspace/                                       ← $CONNSYS_EXPERTS_WORKSPACE_
 | FR-02-10 | 首次執行時自動 clone `connsys-memory` repo | Must | 後臺資料收集的基礎設施 |
 | FR-02-11 | 切換 Expert 時印出變更清單（新增/移除/保留的 skills） | Must | 讓同仁知道能力邊界已改變 |
 | FR-02-12 | Hook 實作語言優先順序：**Shell（預設）→ Python（複雜邏輯）→ JS（最後考慮）** | Must | Shell 在所有開發環境普遍存在，無需額外 runtime；Python 是韌體團隊的第二語言；JS 保留作為 OpenClaw 遷移的備用路徑 |
+| FR-02-13 | 支援**多個 Expert 同時安裝**：install.sh 必須管理 symlink 不衝突，若兩個 Expert 包含同名 skill/hook，後安裝者**不可覆蓋**已存在的 link，應警告並跳過 | Must | 解決多 Expert 共用 framework-common 等共用 Skill 時的 symlink 衝突問題 |
+| FR-02-14 | install.sh 支援 `--list` 參數，列出目前 `.claude/` 中所有已安裝的 skill symlink 及其來源 Expert | Must | 讓同仁隨時了解目前安裝了哪些 Expert 與 skill 組合 |
+| FR-02-15 | install.sh 支援 `--doctor` 參數：**診斷所有 skill symlink 是否正常**（target 是否存在、是否有 dangling link）、列出目前已安裝的所有 Expert、顯示多 Expert 的安裝狀態 | Must | 多 Expert 環境中，快速定位安裝問題、dangling symlink、版本不一致 |
+| FR-02-16 | install.sh 執行前自動檢查環境：system Python 版本、`uv` 是否安裝、`uvx` 是否可用，版本不符時輸出警告（不阻斷安裝，但提示） | Should | PEP 723 腳本需要 Python ≥ 3.11；`uv`/`uvx` 是執行 Python 腳本的推薦方式 |
 
 ### FR-03：環境變數
 
@@ -564,12 +569,13 @@ git -C "$CONNSYS_EXPERTS_MEMORY_PATH" push origin main
 | FR-04-4 | Expert 可有私有 skills，切換時一併替換 | Must | 不同專家有不同的知識庫 |
 | FR-04-5 | External skills 透過 registry 聲明，install.sh 自動建立 link | Should | 整合社群工具 |
 | FR-04-6 | 每個 Skill 資料夾除 `SKILL.md` 外，還需含 `README.md`、`test/`、`report/` | Must | 統一 Skill 資料夾標準，支援測試驗證與執行記錄 |
-| FR-04-7 | Skill `README.md` 記錄：History、使用說明、人工安裝說明、Design、目的；開發說明亦可寫於此 | Must | 讓維護者了解 skill 的脈絡與演進，開發者不需另開文件 |
+| FR-04-7 | Skill `README.md` 記錄：History、使用說明、人工安裝說明、Design、目的；開發說明亦可寫於此（如何新增 case、測試覆蓋率目標、已知問題）。Skill README 範本與最佳實踐詳見 Future Work FW-03 | Must | 讓維護者了解 skill 的脈絡與演進，開發者不需另開文件 |
 | FR-04-8 | Skill `test/` 以 **Shell 腳本（`test-basic.sh`）為主**；需 Python 時使用 pytest，測試檔命名 `test_xxx.py` | Must | Shell 腳本覆蓋基本驗證；pytest 負責結構化 unit test，CI 可自動執行 |
 | FR-04-9 | Skill `report/` 記錄執行過程、結果、token 用量 | Should | 追蹤 Skill 品質與 AI 成本 |
 | FR-04-10 | Skill 內的 script 語言優先順序：**Shell（預設）→ Python（複雜邏輯）**，與 hook 策略一致 | Must | 一致的語言策略降低維護認知負擔 |
 | FR-04-11 | Skill / Hook 內的所有 **Python 腳本須採用 PEP 723 Inline Script Metadata**，在腳本頂端宣告 `requires-python` 與 `dependencies` | Must | 免除 `requirements.txt` 與 venv 管理；每個腳本自帶依賴宣告，可直接用 `uv run` 執行；參考：[PEP 723](https://peps.python.org/pep-0723/) |
 | FR-04-12 | pytest `test_xxx.py` 放置於 skill 的 `test/` 資料夾，測試資料用 `test-data.json` 或 `conftest.py` 管理；執行 pytest 時**優先使用 `uvx pytest`**，可與 `uv run` 共用同一 Python 版本，避免環境不一致 | Should | 標準化測試目錄，CI 可直接 `uvx pytest test/` 執行；`uvx` 確保 pytest 與腳本使用相同 Python 版本 |
+| FR-04-13 | **Skill 為主要實作單位；`commands/` 資料夾僅保留作 Claude plugin format 相容用**。新開發的 Expert 不須再建立獨立的 command 資料夾；若 Skill 需要像 Command 一樣行為（不自動觸發），在 SKILL.md frontmatter 加入 `disable-model-invocation: true` | Must | 統一以 Skill 開發，降低概念複雜度；Command 資料夾為歷史相容層，未來 Phase 2 遷移時統一處理 |
 
 ### FR-05：CLAUDE.md 生成機制
 
@@ -602,7 +608,7 @@ git -C "$CONNSYS_EXPERTS_MEMORY_PATH" push origin main
 |------|------|--------|------|
 | FR-06-7 | 建立 `memory/shared/` 區域（跨 Expert 共用知識） | Must | 儲存 project.md、conventions.md 等跨 Expert 都需要的知識，Expert 切換後仍可讀取 |
 | FR-06-8 | 建立 `memory/working/{expert}/` 區域（當前 Expert 的飛行中狀態） | Must | 儲存 in-flight 的工作日誌、決策記錄，Expert 切換時由 hand-off hook 清除（或歸檔），避免記憶污染 |
-| FR-06-9 | 建立 `memory/handoffs/{run-id}/` 區域（交接文件，寫入後唯讀） | Must | 壓縮摘要 < 2000 tokens，新 Expert 由 session-start hook 讀取，確保交接資訊完整傳遞 |
+| FR-06-9 | 建立 `memory/handoffs/{run-id}/` 區域（交接文件，寫入後唯讀）。**`run-id` 應使用 Claude Session ID**（由環境變數或 hook context 取得），確保同一人開多個 Claude 視窗時不衝突；若無法取得 Session ID，fallback 為 `{timestamp}-{random}` | Must | 壓縮摘要 < 2000 tokens，新 Expert 由 session-start hook 讀取，確保交接資訊完整傳遞；用 Session ID 作 run-id 可避免同一人同時開多個 Claude 時產生衝突 |
 | FR-06-10 | `session-start` hook 自動偵測 `memory/handoffs/` 是否有待接的 hand-off 文件 | Must | 新 Expert 啟動時不需人工操作即可拿到上一個 Expert 的交接內容 |
 | FR-06-11 | 週期性記憶整理（Periodic Collection）：每日或每週自動彙整本地記憶至 connsys-memory | Should | 收集長期知識，供未來 framework-learn-expert 分析，但不造成即時系統負擔 |
 
@@ -635,6 +641,7 @@ git -C "$CONNSYS_EXPERTS_MEMORY_PATH" push origin main
 | FR-09-2 | 警告訊息包含：操作說明、影響範圍、確認提示 | Must | 讓同仁有足夠資訊做判斷 |
 | FR-09-3 | Expert 可設定哪些操作需要人類介入（per-expert 設定） | Should | 不同 Expert 的風險等級不同 |
 | FR-09-4 | 未來支援 Agent 自行 install 所需 Expert | Could | 實現完全自動化的先決條件 |
+| FR-09-5 | **Human in the Loop 的確認行為由 Expert/Skill 的 prompt 內容實作**，透過 SKILL.md 或 expert.md 中的指引告知 Claude Code / OpenClaw 在特定操作前應暫停並詢問同仁；不依賴外部 stdin/API，確保跨平台（Claude Code、OpenClaw）皆可運作 | Must | 以 prompt 驅動確認行為是最可攜帶的方式，不綁定特定平台的 stdin 或 UI 元件 |
 
 ---
 
@@ -660,6 +667,8 @@ git -C "$CONNSYS_EXPERTS_MEMORY_PATH" push origin main
 - Symlink 在 Windows 環境需要額外處理（本期不支援）
 - `connsys-memory` repo 的 push 需要同仁對 remote 有寫入權限
 - Human in the Loop 功能為未來規劃，本期以人工切換 Expert 為主
+- **Skill 版本向後相容性**：SKILL.md frontmatter 的 `version` 欄位目前僅供顯示，尚未定義 Skill 升版後舊 hand-off 文件的相容性規則；Skill 的 breaking change 需人工審查
+- **Local memory GC 尚未設計**：`memory/shared/` 無限增長、`memory/handoffs/` 無保留期限機制，待真實使用 hand-off 功能後再行設計（詳見 Future Work FW-04）
 
 ### 假設
 
@@ -774,6 +783,75 @@ AI Agent 生態系統的安全威脅已有實際案例：
 | FW-02-4 | 實現完整的 `Think → Plan → Act → Learn` 循環 | Future |
 
 **參考實作**：[claude-mem](https://github.com/thedotmack/claude-mem)
+
+---
+
+### FW-03：Skill README 開發說明範本
+
+**背景**：
+
+目前 FR-04-7 僅規定 README.md 應包含的大綱，但沒有具體的開發說明格式範本。隨著團隊規模擴大，需要更一致的 Skill 開發文件標準。
+
+**目標**：
+
+提供標準化 Skill README 範本，包含：開發說明章節格式、如何新增 case 的步驟、測試覆蓋率目標、已知問題記錄方式。
+
+**參考資料**：
+
+- [Skill Best Practices（Claude 官方）](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices)
+- [SKILL.md 範例（Anthropic skills repo）](https://github.com/anthropics/skills/blob/main/skills/skill-creator/SKILL.md)
+
+**需求**：
+
+| 編號 | 需求 | 優先級 |
+|------|------|--------|
+| FW-03-1 | 提供標準化的 Skill README.md 範本（含開發說明章節）| Future |
+| FW-03-2 | 範本包含：如何新增 case、測試覆蓋率目標（Shell + pytest）、已知問題、維護建議 | Future |
+| FW-03-3 | 在 `framework-skill-create-expert` 中整合 README 範本生成步驟 | Future |
+
+---
+
+### FW-04：Local Memory GC 機制
+
+**背景**：
+
+目前 `memory/shared/`、`memory/working/`、`memory/handoffs/` 皆無自動清理機制，長期使用後可能無限增長。
+
+**目標**：
+
+設計合理的 GC 策略，在不影響可靠性的前提下控制 memory 資料夾大小。
+
+**需求**：
+
+| 編號 | 需求 | 優先級 |
+|------|------|--------|
+| FW-04-1 | 定義 `memory/handoffs/` 的保留期限（如保留最近 30 個 run-id）| Future |
+| FW-04-2 | 定義 `memory/shared/` 的壓縮策略（如超過一定大小自動摘要）| Future |
+| FW-04-3 | 由 session-end hook 或獨立 GC script 負責定期清理 | Future |
+
+> 此功能待真實使用 hand-off 功能、累積足夠資料後再行設計。
+
+---
+
+### FW-05：registry.json 格式與 Expert 推薦機制
+
+**背景**：
+
+FR-01-6 定義了 `registry.json` 的存在，但格式尚未定義。同時，缺乏根據當前任務自動推薦合適 Expert 的機制。
+
+**目標**：
+
+定義 `registry.json` 格式（與 expert.json 的關係、aggregate 還是 index）、以及 `expert-discovery` skill 的自動推薦邏輯。
+
+**需求**：
+
+| 編號 | 需求 | 優先級 |
+|------|------|--------|
+| FW-05-1 | 定義 `registry.json` 格式（Expert 名稱、描述、能力標籤、install 路徑）| Future |
+| FW-05-2 | 定義 `registry.json` 的生成機制（人工維護 or 自動從 expert.json aggregate）| Future |
+| FW-05-3 | `expert-discovery` skill 支援根據關鍵字或任務描述推薦合適的 Expert | Future |
+
+> 此功能待開始實際使用多 Expert 後再行設計。
 
 ---
 

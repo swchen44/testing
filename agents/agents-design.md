@@ -1,8 +1,8 @@
 # Consys Experts — 設計書
 
-**文件版本**：v2.10
+**文件版本**：v2.11
 **狀態**：Draft
-**依據**：agents-requirements.md v2.8
+**依據**：agents-requirements.md v2.9
 
 > **注意**：本文件中所列的 expert、skill 名稱均為**示例**，用於說明命名規則與架構設計。實際 expert 與 skill 的規劃以團隊討論為準。
 
@@ -584,8 +584,10 @@ source {domain}/experts/{expert}/install.sh [OPTIONS]
 OPTIONS:
   （無參數）          安裝此 Expert（symlink 模式，自動偵測場景）
   --copy              安裝（複製模式）
-  --uninstall         移除當前 Expert 的所有 links
+  --uninstall         移除此 Expert 貢獻的 links（不影響其他 Expert 的 links）
   --switch            切換（= uninstall + install + 印出 diff）
+  --list              列出 .claude/ 中目前所有已安裝的 skill symlink 及來源 Expert
+  --doctor            診斷所有 symlink 健康狀態、已安裝 Expert 清單（詳見 §5.4）
   --target openclaw   安裝目標為 OpenClaw（未來）
   --scenario VALUE    指定場景：agent-first 或 legacy
   --env-only          僅設定環境變數
@@ -657,6 +659,106 @@ Commands 變更：
   ○ 保留（framework-common）: /experts, /handoff
 
 ✅ wifi-cicd-expert 安裝完成，請重新開啟 Claude Code
+```
+
+### 5.4 多 Expert 安裝設計（Multi-Expert Install）
+
+**設計原則**：`framework-common-expert` 通常是所有 Expert 都需要的基礎，建議先安裝，再安裝其他 Expert。每個 Expert 的 install.sh 彼此獨立、互不依賴，但 symlink 管理必須不衝突。
+
+**Symlink 衝突規則**：
+
+```
+安裝順序：先安裝 framework-common-expert，再安裝 wifi-build-expert
+
+規則 1：同名 symlink 已存在時，後安裝者不覆蓋，輸出警告
+  ⚠️  skills/framework-handoff-flow 已存在（來自 framework-common-expert），跳過
+
+規則 2：若同名 symlink 指向相同 target，靜默略過（視為正常）
+
+規則 3：若同名 symlink 指向不同 target，輸出衝突警告，保留既有 link
+  ⚠️  衝突: hooks/session-end.sh 已指向 framework-common/hooks/session-end.sh
+      此 Expert 的版本未安裝，請手動確認
+
+規則 4：每個 Expert 的安裝記錄寫入 .claude/.installed-experts（每行一個 Expert path）
+  # .claude/.installed-experts
+  /path/to/framework/experts/framework-common-expert
+  /path/to/wifi/experts/wifi-build-expert
+```
+
+**CLAUDE.md 合併**：多 Expert 安裝時，CLAUDE.md 合併所有已安裝 Expert 的 expert.json 欄位：
+
+```
+# 合併邏輯
+- `purpose` / `role`：依安裝順序 @include 各 Expert 的 expert.md
+- `skills`：union（去重）
+- `transitions`：union（後安裝者的事件優先）
+- `owner`：保留各 Expert 自己的 owner
+```
+
+**推薦安裝流程**：
+
+```bash
+# Step 1：先安裝 framework-common（共用基礎）
+source framework/experts/framework-common-expert/install.sh
+
+# Step 2：再安裝 domain-common（該 domain 共用）
+source wifi/experts/wifi-common-expert/install.sh
+
+# Step 3：最後安裝目標 Expert
+source wifi/experts/wifi-build-expert/install.sh
+
+# 查看安裝結果
+source wifi/experts/wifi-build-expert/install.sh --list
+```
+
+### 5.5 install.sh --doctor 診斷輸出
+
+```
+$ source wifi/experts/wifi-build-expert/install.sh --doctor
+
+=== Connsys Experts Doctor ===
+
+已安裝的 Experts：
+  [1] framework-common-expert  (/path/to/framework/experts/framework-common-expert)
+  [2] wifi-build-expert        (/path/to/wifi/experts/wifi-build-expert)
+
+Skill Symlinks 健康狀態：
+  ✅ framework-expert-discovery-knowhow  → .../framework-common-expert/skills/...  OK
+  ✅ wifi-build-flow                     → .../wifi-build-expert/skills/...        OK
+  ❌ wifi-linkerscript-knowhow           → .../wifi-build-expert/skills/...        DANGLING（target 不存在）
+
+Hook Symlinks 健康狀態：
+  ✅ session-start.sh  → .../framework-common-expert/hooks/session-start.sh  OK
+  ✅ session-end.sh    → .../framework-common-expert/hooks/session-end.sh    OK
+
+環境檢查：
+  Python (system): 3.11.8  ✅ (>= 3.11)
+  uv:              0.4.2   ✅ 已安裝
+  uvx:             0.4.2   ✅ 已安裝
+
+建議修復：
+  → 刪除 dangling link: .claude/skills/wifi-linkerscript-knowhow
+    rm .claude/skills/wifi-linkerscript-knowhow
+```
+
+### 5.6 install.sh 環境預檢（Python / uv / uvx）
+
+install.sh 安裝前自動執行環境預檢，輸出警告（不阻斷安裝）：
+
+```bash
+# 環境預檢邏輯（install.sh 中）
+check_python_version() {
+  PY_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null)
+  if [[ -z "$PY_VER" ]]; then
+    echo "⚠️  Python 未安裝，PEP 723 腳本需要 Python >= 3.11"
+  elif python3 -c "import sys; exit(0 if sys.version_info >= (3,11) else 1)" 2>/dev/null; then
+    echo "✅ Python $PY_VER"
+  else
+    echo "⚠️  Python $PY_VER < 3.11，建議升級以執行 PEP 723 腳本"
+  fi
+  command -v uv  &>/dev/null && echo "✅ uv 已安裝"  || echo "⚠️  uv 未安裝（建議安裝：curl -LsSf https://astral.sh/uv/install.sh | sh）"
+  command -v uvx &>/dev/null && echo "✅ uvx 已安裝" || echo "⚠️  uvx 未安裝（通常隨 uv 一起安裝）"
+}
 ```
 
 ---
@@ -963,9 +1065,9 @@ workspace/.claude/memory/
 │       └── working.md              ← in-flight 工作日誌、當前進度、未完成項目
 │
 └── handoffs/                       ← Zone 3：交接文件（寫入後唯讀）
-    ├── 20260323-143022/            ← run-id（timestamp format）
+    ├── {session-id}/               ← run-id = Claude Session ID（優先）
     │   └── handoff.md              ← 壓縮摘要 < 2000 tokens
-    └── 20260323-160011/
+    └── 20260323-160011-a3f2/       ← fallback：{timestamp}-{random4}（Session ID 不可用時）
         └── handoff.md
 ```
 
@@ -976,6 +1078,8 @@ workspace/.claude/memory/
 | `shared/` | 長期持久，不因 Expert 切換而清除 | 所有 Expert 可讀寫 | 任何 hook 皆可更新 |
 | `working/{expert}/` | 隨 Expert 生命週期，切換時清除（或歸檔） | 僅當前 Expert 寫入，其他可讀 | session-end、pre-compact |
 | `handoffs/{run-id}/` | 永久存在，寫入後唯讀 | 由 hand-off hook 建立，後繼 Expert 讀取 | session-end、--switch |
+
+> **run-id 來源**：優先使用 Claude Session ID（確保同一人同時開多個 Claude 視窗不衝突）；若無法取得，fallback 為 `{timestamp}-{random4}`（如 `20260323-160011-a3f2`）。
 
 ### 10.4 本地記憶 vs connsys-memory 的分工
 
@@ -1216,6 +1320,19 @@ employee_id: john.doe
 
 ---
 
+## 13.5 已知限制
+
+| 限制 | 說明 | 對應 Future Work |
+|------|------|-----------------|
+| **Skill 版本向後相容** | SKILL.md `version` 欄位僅供顯示，Skill 升版後舊 hand-off 文件的相容性未定義；breaking change 需人工審查 | 無（列為設計邊界） |
+| **Local Memory 無 GC** | `memory/shared/`、`memory/handoffs/` 無自動清理機制，長期使用後可能無限增長 | FW-04 |
+| **registry.json 格式未定義** | `registry.json` 存在但格式尚未設計，expert-discovery skill 目前僅能手動列表 | FW-05 |
+| **connsys-memory 同帳號多開衝突** | 同一人同時開多個 Claude 視窗時，若 Session ID 無法取得，timestamp fallback 仍有極小衝突機率 | FR-06-9（優先用 Session ID）|
+| **Windows 不支援 symlink** | install.sh 的 symlink 模式在 Windows 需額外處理，本期不支援 | 無（環境限制）|
+| **Human in the Loop 無超時機制** | 目前 HitL 確認行為由 prompt 驅動，無自動超時或「不再詢問」機制 | Phase 2 設計 |
+
+---
+
 ## 14. 遷移路線
 
 ### 14.1 三階段遷移
@@ -1225,11 +1342,33 @@ employee_id: john.doe
 | 安裝 | `install.sh` symlink | `install.sh --target openclaw` | `AgentDefinition` 自動 |
 | Hooks | **Shell（優先）+ Python（複雜邏輯）** | TypeScript `handler.ts`（此階段重寫）| `PostToolUse callback` |
 | Skills | SKILL.md | SKILL.md + `metadata.openclaw` | `system_prompt` 注入 |
-| Commands | COMMAND.md | user-invocable Skill | SDK tool 定義 |
+| Commands | COMMAND.md（相容層，Phase 1 不新增）| user-invocable Skill | SDK tool 定義 |
 | Memory | Markdown + Git | MEMORY.md + LanceDB | JSON output |
 | Human in Loop | 手動確認 | Hook 觸發確認 | 風險評分自動決定 |
 
-### 14.2 SKILL.md 遷移格式
+### 14.2 Skill 與 Command 的邊界設計
+
+**原則**：**Skill 是主要實作單位，`commands/` 資料夾為 Claude plugin format 的相容層**。Phase 1 新開發的 Expert 不需建立獨立的 command 資料夾。
+
+| 情況 | 做法 |
+|------|------|
+| 需要自動觸發的知識/流程 | 使用 Skill，不加 `disable-model-invocation` |
+| 需要像 Command 一樣由使用者主動呼叫 | 使用 Skill，在 SKILL.md frontmatter 加 `disable-model-invocation: true` |
+| 已有 `commands/` 資料夾的 Expert | 保留（相容），不主動遷移，Phase 2 統一處理 |
+| 新建 Expert | 只用 Skill，不建 commands/ |
+
+**`disable-model-invocation` 範例**：
+
+```yaml
+---
+name: framework-handoff-tool
+type: tool
+disable-model-invocation: true   # 使用者主動輸入 /handoff 才觸發，不自動觸發
+description: 手動觸發 hand-off 交接流程
+---
+```
+
+### 14.3 SKILL.md 遷移格式
 
 加入 `metadata.openclaw` 區塊即可，內容不需修改：
 
@@ -1367,6 +1506,63 @@ framework/experts/framework-learn-expert/skills/
 **目標效果**：Expert 不只是靜態知識庫，而是能透過累積的使用資料**持續自我強化**的系統，實現真正的 `Think → Plan → Act → Learn` 循環。
 
 **參考實作**：[claude-mem](https://github.com/thedotmack/claude-mem)
+
+---
+
+### 16.3 Skill README 開發說明範本
+
+**現況**：Skill README.md 的開發說明章節目前無標準格式，各 Skill 寫法不一致。
+
+**目標**：提供統一的 Skill README 範本，包含：如何新增 case、測試覆蓋率目標、已知問題記錄方式，由 `framework-skill-create-expert` 在建立新 Skill 時自動生成。
+
+**參考資料**：
+
+- [Skill Best Practices（Claude 官方）](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices)
+- [SKILL.md 範例（Anthropic skills repo）](https://github.com/anthropics/skills/blob/main/skills/skill-creator/SKILL.md)
+
+> 待真實使用後再補齊完整範本與步驟說明。
+
+---
+
+### 16.4 Local Memory GC 機制
+
+**現況**：`memory/shared/`、`memory/handoffs/` 無自動清理，長期使用後可能無限增長。
+
+**設計方向**：
+
+| 區域 | GC 策略 |
+|------|---------|
+| `memory/handoffs/` | 保留最近 N 個 run-id（建議 30），超出者歸檔至 connsys-memory |
+| `memory/shared/` | 超過閾值（如 100KB）時，由 session-end hook 呼叫 Python helper 自動摘要壓縮 |
+| `memory/working/` | Expert 切換時清除（已有設計），無需額外 GC |
+
+> 待真實使用 hand-off 功能、累積足夠資料後再行實作。
+
+---
+
+### 16.5 registry.json 格式與 Expert 推薦
+
+**現況**：`registry.json` 規格未定義，`expert-discovery` skill 僅能手動列表，無根據任務自動推薦的能力。
+
+**設計方向**：
+
+```json
+// registry.json（草案格式）
+{
+  "version": "1.0",
+  "experts": [
+    {
+      "name": "wifi-build-expert",
+      "path": "wifi/experts/wifi-build-expert",
+      "description": "負責 WiFi 韌體 Build 流程",
+      "tags": ["build", "wifi", "compile"],
+      "owner": "wifi-team"
+    }
+  ]
+}
+```
+
+> 待開始實際使用多 Expert 後再行設計；registry.json 可由 CI 自動從各 expert.json aggregate。
 
 ---
 
