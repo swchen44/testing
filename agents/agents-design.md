@@ -1,1007 +1,730 @@
-# Multi-Agent Workflow System — 設計書
+# Consys Experts — 設計書
 
-**文件版本**：v1.1
+**文件版本**：v2.1
 **狀態**：Draft
-**依據**：agents-requirements.md v1.1
+**依據**：agents-requirements.md v2.1
 
 ---
 
 ## 1. 系統架構總覽
 
+### 1.1 Harness 架構觀
+
+本系統依據 **Harness Engineering** 的精神設計（參考：[Birgitta Böckeler / Martin Fowler Blog](https://martinfowler.com/articles/exploring-gen-ai/harness-engineering.html)）。
+
+> Harness = 一套環繞在 AI 模型周圍的系統、工具與實踐，用以約束、引導並強化 AI Agent 的能力。
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        Consys Expert Harness                        │
+│                                                                     │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │  上下文工程（Context Engineering）                            │  │
+│  │  SKILL.md 知識庫、expert.md、expert.local.md、shared memory  │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │  架構約束（Architectural Constraints）                        │  │
+│  │  Hooks（pre-compact、write-guard）、hand-off 格式規範         │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │  垃圾回收（Garbage Collection）                               │  │
+│  │  session-end 整理記憶、push consys-memory                    │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                                                                     │
+│                 ↓ 透過以上三層，強化 AI 核心能力                    │
+│                                                                     │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │         Claude Code（或未來 OpenClaw / ADK / SDK）            │  │
+│  │              Think → Plan → Act → Learn                      │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### 1.2 Consys Expert 組成
+
+```
+Consys Expert = Agent 核心能力 + Consys Workflow + Consys Tool + Consys Knowledge
+
+┌────────────────┐  ┌────────────────┐  ┌────────────────┐
+│   Workflow     │  │     Tool       │  │   Knowledge    │
+│  .claude/hooks │  │ .claude/cmds   │  │ .claude/skills │
+│                │  │                │  │                │
+│ session-start  │  │ /experts       │  │ expert-disc.   │
+│ session-end    │  │ /handoff       │  │ handoff-proto  │
+│ pre-compact    │  │ /...           │  │ build-systems  │
+│ mid-checkpoint │  │                │  │ ...            │
+└────────────────┘  └────────────────┘  └────────────────┘
+       ↑                   ↑                   ↑
+   common/ + Expert 私有（全部透過 symlink 接入 .claude/）
+```
+
+### 1.3 整體元件圖
+
 ```mermaid
 graph TB
-    subgraph Claude Code Runtime
-        direction TB
+    subgraph Workspace
+        CLAUDE[CLAUDE.md\n@include expert.md\n@include expert.local.md]
 
-        subgraph Entry Layer
-            FA[Featured Agent\nSOUL + DUTIES + MEMORY]
+        subgraph .claude/
+            EXP_MD[expert.md\n由 install.sh 生成]
+            EXP_LOCAL[expert.local.md\n使用者客製化]
+            SKILLS[skills/\nsymlinks]
+            HOOKS[hooks/\nsymlinks]
+            CMDS[commands/\nsymlinks]
+            ACTIVE[.active-expert]
         end
 
-        subgraph Agent Layer
-            FT[Fetcher Agent]
-            FX[Fixer Agent]
-            DV[Developer Agent]
-        end
-
-        subgraph Skill Layer
-            subgraph Shared Skills 共用技能庫
-                SC[.claude/skills/\nproject-context/\ngit-operations/\nbuild-systems/\nhandoff-protocol/]
-            end
-            subgraph Private Skills 私有技能
-                FS[fetcher/skills/\nbuild-advanced/]
-                FXS[fixer/skills/\nerror-patterns/]
-                DS[developer/skills/\nfeature-patterns/]
-            end
-        end
-
-        subgraph Memory Layer
-            SM[memory/shared/\nproject.md\nconventions.md\ndecisions.md]
-            WM[memory/agents/\nfetcher/working.md\nfixer/working.md\ndeveloper/working.md]
-            HM[memory/handoffs/\nrun-id/\n01-fetcher.md\n02-fixer.md]
+        subgraph codespace/
+            FW[fw/\n.repo + bora repos]
+            DRV[drv/\n.repo + driver repos]
         end
     end
 
-    subgraph Infrastructure
-        GIT[(Git Repository)]
-        CFG[.claude/agent-config.json]
-        REG[agents/registry.json]
+    subgraph consys-experts/
+        REGISTRY[registry.json]
+
+        subgraph common/
+            C_SKILLS[skills/\nexpert-discovery\nhandoff-protocol]
+            C_HOOKS[hooks/\nsession-*.js\npre-compact.js]
+            C_CMDS[commands/\nexperts.md\nhandoff.md]
+        end
+
+        subgraph experts/
+            BE[build-expert/\nexpert.json\nCLAUDE.md\nskills/build-systems]
+            CE[cicd-expert/\nexpert.json\nCLAUDE.md\nskills/pipeline-ops]
+            DE[device-expert/\nexpert.json\nCLAUDE.md\nskills/device-ctrl]
+        end
+
+        subgraph external/
+            SC[skill-creator/]
+            CME[claude-memory-engine/]
+        end
     end
 
-    FA -->|偵測需求| FT & FX & DV
-    FT & FX & DV -->|symlink| SC
-    FT -->|私有| FS
-    FX -->|私有| FXS
-    DV -->|私有| DS
-    FT & FX & DV --> SM & WM
-    FT & FX & DV -->|交接時寫入| HM
-    HM -->|git commit| GIT
-    SM -->|git commit| GIT
-    CFG -->|控制行為| FA & FT & FX & DV
-    REG -->|Agent 目錄| FA
+    subgraph consys-memory/
+        EMP[employees/\njohn.doe/\n  sessions/\n  handoffs/\n  summary.md]
+    end
+
+    GIT[(Git Remote)]
+
+    CLAUDE --> EXP_MD
+    CLAUDE --> EXP_LOCAL
+    SKILLS -.symlink.-> C_SKILLS
+    SKILLS -.symlink.-> BE
+    HOOKS -.symlink.-> C_HOOKS
+    CMDS -.symlink.-> C_CMDS
+    HOOKS -->|session-end push| consys-memory/
+    consys-memory/ --> GIT
 ```
 
 ---
 
 ## 2. 目錄結構設計
 
+### 2.1 `consys-experts` Repo
+
 ```
-project-root/
+consys-experts/ (git)
+├── README.md
+├── registry.json                    ← 所有 Expert 目錄
+├── install.sh                       ← 頂層：env vars + clone consys-memory
 │
-├── CLAUDE.md                          ← 全域背景，@引用共用技能
+├── common/
+│   ├── skills/                      ← Knowledge（共用知識庫）
+│   │   ├── expert-discovery/
+│   │   │   └── SKILL.md
+│   │   └── handoff-protocol/
+│   │       └── SKILL.md
+│   ├── hooks/                       ← Workflow（自動觸發）
+│   │   ├── session-start.js
+│   │   ├── session-end.js
+│   │   ├── pre-compact.js
+│   │   ├── mid-session-checkpoint.js
+│   │   └── shared-utils.js
+│   └── commands/                    ← Tool（手動指令）
+│       ├── experts.md
+│       └── handoff.md
+│
+├── experts/
+│   ├── build-expert/
+│   │   ├── expert.json
+│   │   ├── CLAUDE.md
+│   │   ├── install.sh
+│   │   └── skills/
+│   │       └── build-systems/SKILL.md
+│   ├── cicd-expert/
+│   │   ├── expert.json
+│   │   ├── CLAUDE.md
+│   │   ├── install.sh
+│   │   └── skills/
+│   │       └── pipeline-operations/SKILL.md
+│   └── device-expert/
+│       ├── expert.json
+│       ├── CLAUDE.md
+│       ├── install.sh
+│       └── skills/
+│           └── device-control/SKILL.md
+│
+└── external/                        ← 社群工具（工具名稱為資料夾名）
+    ├── skill-creator/               ← git submodule
+    └── claude-memory-engine/        ← git submodule（參考實作）
+```
+
+### 2.2 Agent First 場景（完整 workspace）
+
+```
+workspace/                                       ← $CONSYS_EXPERTS_WORKSPACE_ROOT_PATH
+│
+├── consys-experts/ (git)                        ← $CONSYS_EXPERTS_PATH
+│   └── （2.1 結構）
+│
+├── consys-memory/ (git)                         ← $CONSYS_MEMORY_PATH
+│   └── employees/
+│       └── john.doe/                            ← $CONSYS_EMPLOYEE_ID
+│           ├── sessions/
+│           │   └── 2026-03-23.md
+│           ├── handoffs/
+│           │   └── {run-id}.md
+│           └── summary.md
+│
+├── CLAUDE.md                                    ← install.sh 生成
+│   # @.claude/expert.md
+│   # @.claude/expert.local.md
 │
 ├── .claude/
-│   ├── settings.json                  ← Hooks 設定
-│   ├── agent-config.json              ← 使用者行為設定
-│   └── skills/                        ← 共用技能庫（真實檔案）
-│       ├── project-context/
-│       │   └── SKILL.md
-│       ├── git-operations/
-│       │   └── SKILL.md
-│       ├── build-systems/
-│       │   └── SKILL.md
-│       ├── code-reading/
-│       │   └── SKILL.md
-│       └── handoff-protocol/
-│           └── SKILL.md
+│   ├── expert.md                                ← 由 expert.json 生成
+│   ├── expert.local.md                          ← 個人客製化（.gitignore）
+│   ├── .active-expert                           ← "build-expert"
+│   │
+│   ├── skills/                                  ← Knowledge symlinks
+│   │   ├── expert-discovery → $CONSYS_EXPERTS_PATH/common/skills/expert-discovery/
+│   │   ├── handoff-protocol → $CONSYS_EXPERTS_PATH/common/skills/handoff-protocol/
+│   │   └── build-systems    → $CONSYS_EXPERTS_PATH/experts/build-expert/skills/build-systems/
+│   │
+│   ├── hooks/                                   ← Workflow symlinks
+│   │   ├── session-start.js          → $CONSYS_EXPERTS_PATH/common/hooks/session-start.js
+│   │   ├── session-end.js            → $CONSYS_EXPERTS_PATH/common/hooks/session-end.js
+│   │   ├── pre-compact.js            → $CONSYS_EXPERTS_PATH/common/hooks/pre-compact.js
+│   │   ├── mid-session-checkpoint.js → $CONSYS_EXPERTS_PATH/common/hooks/mid-session-checkpoint.js
+│   │   └── shared-utils.js           → $CONSYS_EXPERTS_PATH/common/hooks/shared-utils.js
+│   │
+│   └── commands/                                ← Tool symlinks
+│       ├── experts.md  → $CONSYS_EXPERTS_PATH/common/commands/experts.md
+│       └── handoff.md  → $CONSYS_EXPERTS_PATH/common/commands/handoff.md
 │
-├── agents/
-│   ├── registry.json                  ← Agent 目錄與安裝資訊
-│   │
-│   ├── featured/                      ← 必裝，入口 Agent
-│   │   ├── CLAUDE.md                  ← 按需載入 featured 技能
-│   │   ├── SOUL.md                    ← 身份定義
-│   │   ├── DUTIES.md                  ← 職責與交接程序
-│   │   └── skills/
-│   │       ├── project-context  ──symlink──► .claude/skills/project-context/
-│   │       ├── git-operations   ──symlink──► .claude/skills/git-operations/
-│   │       ├── handoff-protocol ──symlink──► .claude/skills/handoff-protocol/
-│   │       └── agent-discovery/       ← featured 私有技能
-│   │           └── SKILL.md
-│   │
-│   ├── fetcher/                       ← 選裝
-│   │   ├── CLAUDE.md
-│   │   ├── SOUL.md
-│   │   ├── DUTIES.md
-│   │   └── skills/
-│   │       ├── project-context  ──symlink──►
-│   │       ├── git-operations   ──symlink──►
-│   │       ├── build-systems    ──symlink──►
-│   │       ├── handoff-protocol ──symlink──►
-│   │       └── build-advanced/        ← fetcher 私有技能
-│   │           └── SKILL.md
-│   │
-│   ├── fixer/                         ← 選裝
-│   │   ├── CLAUDE.md
-│   │   ├── SOUL.md
-│   │   ├── DUTIES.md
-│   │   └── skills/
-│   │       ├── project-context  ──symlink──►
-│   │       ├── code-reading     ──symlink──►
-│   │       ├── handoff-protocol ──symlink──►
-│   │       └── error-patterns/
-│   │           └── SKILL.md
-│   │
-│   └── developer/                     ← 選裝
-│       ├── CLAUDE.md
-│       ├── SOUL.md
-│       ├── DUTIES.md
-│       └── skills/
-│           ├── project-context  ──symlink──►
-│           ├── code-reading     ──symlink──►
-│           ├── handoff-protocol ──symlink──►
-│           └── feature-patterns/
-│               └── SKILL.md
+└── codespace/                                   ← $CONSYS_EXPERT_CODE_SPACE_PATH
+    ├── fw/
+    │   ├── .repo (git)
+    │   └── bora/
+    │       ├── bt/ (git)
+    │       ├── build/ (git)
+    │       ├── wifi/ (git)
+    │       └── mcu/ (git)
+    ├── fw2/
+    │   ├── .repo (git)
+    │   └── bora/
+    │       ├── bt/ (git)
+    │       ├── build/ (git)
+    │       ├── mcu/ (git)
+    │       └── wifi/ (git)
+    ├── drv/                                     ← gen4m driver SDK（可能上百個 repo）
+    │   ├── .repo (git)
+    │   └── gen4m/
+    │       ├── wlan_gen4m/ (git)
+    │       └── wlan_private/ (git)
+    └── drv2/                                    ← logan driver SDK
+        ├── .repo (git)
+        └── logan/
+            ├── wlan_logan/ (git)
+            └── wlan_hwifi/ (git)
+```
+
+### 2.3 Legacy 場景（完整 workspace）
+
+```
+workspace/                           ← $CONSYS_EXPERTS_WORKSPACE_ROOT_PATH
+│                                       $CONSYS_EXPERT_CODE_SPACE_PATH（同一路徑）
 │
-├── memory/
-│   ├── shared/                        ← 所有 Agent 共用，Git 追蹤
-│   │   ├── project.md
-│   │   ├── conventions.md
-│   │   └── decisions.md
-│   ├── agents/
-│   │   ├── featured/working.md        ← 各 Agent 工作記憶（交接後清除）
-│   │   ├── fetcher/working.md
-│   │   ├── fixer/working.md
-│   │   └── developer/working.md
-│   └── handoffs/                      ← 壓縮交接摘要，Git 追蹤
-│       └── {run-id}/
-│           ├── 01-fetcher.md
-│           ├── 02-fixer.md
-│           └── 03-developer.md
+├── .repo (git)                      ← 已存在（傳統 repo tool 下載）
+├── bora/
+│   ├── wifi/ (git)
+│   ├── bt/ (git)
+│   ├── mcu/ (git)
+│   ├── build/ (git)
+│   └── coexistence/ (git)
 │
-└── scripts/
-    ├── install.sh                     ← 初始化整個架構
-    ├── install-agent.sh               ← 安裝指定 Agent + 建立 symlink
-    ├── run-agent.sh                   ← 啟動 Agent（注入交接文件）
-    └── hooks/
-        ├── on-agent-stop.sh           ← 觸發：記憶整理 + git commit
-        └── on-write.sh                ← 觸發：handoff 檔案自動 commit
+├── consys-experts/ (git)            ← 後續 clone
+├── consys-memory/ (git)             ← install.sh 自動 clone
+├── CLAUDE.md                        ← install.sh 生成
+└── .claude/
+    ├── expert.md
+    ├── expert.local.md
+    ├── .active-expert
+    ├── skills/   （同 2.2）
+    ├── hooks/    （同 2.2）
+    └── commands/ （同 2.2）
 ```
 
 ---
 
-## 3. Skill 系統設計
+## 3. 環境變數設計
 
-### 3.1 Skill 資料夾格式
+install.sh 透過 `source` 設定以下環境變數，供 Expert 的 workflow（hooks）、tool（commands）、knowledge（skills）使用：
 
-每個 Skill 是一個**獨立資料夾**，內含標準化的 `SKILL.md`：
+```bash
+# install.sh 設定片段（需 source 執行）
 
-```
-skill-name/
-└── SKILL.md        ← YAML frontmatter + Markdown 內容
-```
+# consys-experts repo 路徑
+export CONSYS_EXPERTS_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-**SKILL.md 格式規範**：
+# workspace 根目錄（.claude/ 所在）
+export CONSYS_EXPERTS_WORKSPACE_ROOT_PATH="$(pwd)"
 
-```yaml
----
-name: project-context          # 唯一識別名稱
-description: 專案背景知識       # 簡短說明
-version: 1.0
-tags:
-  - shared                     # shared = 共用技能
-  - required                   # required = 所有 Agent 必載
-scope: all                     # all / fetcher / fixer / developer
----
+# source code 路徑
+# Agent First：workspace/codespace/
+# Legacy（自動偵測）：workspace/（同 root）
+if [ -f ".repo/manifest.xml" ]; then
+    export CONSYS_EXPERT_CODE_SPACE_PATH="$(pwd)"          # legacy
+else
+    export CONSYS_EXPERT_CODE_SPACE_PATH="$(pwd)/codespace" # agent-first
+fi
 
-# （技能內容 Markdown）
-```
+# 記憶 repo 路徑
+export CONSYS_MEMORY_PATH="$(pwd)/consys-memory"
 
-### 3.2 技能繼承關係
-
-```mermaid
-graph TD
-    subgraph 共用技能庫 .claude/skills/
-        PC[project-context]
-        GO[git-operations]
-        BS[build-systems]
-        CR[code-reading]
-        HP[handoff-protocol]
-    end
-
-    subgraph featured/skills/
-        F_PC[project-context] -.symlink.-> PC
-        F_GO[git-operations]  -.symlink.-> GO
-        F_HP[handoff-protocol]-.symlink.-> HP
-        F_AD[agent-discovery 私有]
-    end
-
-    subgraph fetcher/skills/
-        FT_PC[project-context]-.symlink.-> PC
-        FT_GO[git-operations] -.symlink.-> GO
-        FT_BS[build-systems]  -.symlink.-> BS
-        FT_HP[handoff-protocol]-.symlink.->HP
-        FT_BA[build-advanced 私有]
-    end
-
-    subgraph fixer/skills/
-        FX_PC[project-context]-.symlink.-> PC
-        FX_CR[code-reading]   -.symlink.-> CR
-        FX_HP[handoff-protocol]-.symlink.->HP
-        FX_EP[error-patterns 私有]
-    end
-
-    subgraph developer/skills/
-        DV_PC[project-context]-.symlink.-> PC
-        DV_CR[code-reading]   -.symlink.-> CR
-        DV_HP[handoff-protocol]-.symlink.->HP
-        DV_FP[feature-patterns 私有]
-    end
+# 員工工號（git username）
+export CONSYS_EMPLOYEE_ID="$(git config user.name)"
 ```
 
-### 3.3 按需載入機制
-
-Claude Code 讀取 CLAUDE.md 時採**層級繼承**：
-
-```
-執行環境：agents/fetcher/
-  ↓ Claude Code 讀取順序
-  agents/fetcher/CLAUDE.md    ← 載入 fetcher 私有技能
-        ↑ 自動繼承
-  CLAUDE.md（根目錄）          ← @引用 .claude/skills/ 共用技能
+**在 Hook 中使用範例**：
+```javascript
+// session-end.js
+const memoryPath = process.env.CONSYS_MEMORY_PATH;
+const employeeId = process.env.CONSYS_EMPLOYEE_ID;
+const sessionFile = `${memoryPath}/employees/${employeeId}/sessions/${today}.md`;
 ```
 
-**根目錄 `CLAUDE.md`（共用技能入口）**：
-
+**在 Skill 中使用範例**：
 ```markdown
-# 全域背景
-
-@.claude/skills/project-context/SKILL.md
-@.claude/skills/git-operations/SKILL.md
-@.claude/skills/handoff-protocol/SKILL.md
-```
-
-**`agents/fetcher/CLAUDE.md`（按需追加）**：
-
-```markdown
-# Fetcher 額外技能
-
-@../../.claude/skills/build-systems/SKILL.md
-@skills/build-advanced/SKILL.md
-@../../memory/shared/project.md
+<!-- build-systems/SKILL.md 內容片段 -->
+## 編譯路徑
+預設 firmware build 目錄為 `$CONSYS_EXPERT_CODE_SPACE_PATH/fw/bora/build`
 ```
 
 ---
 
-## 4. 三區記憶架構
+## 4. install.sh 設計
 
-### 4.1 記憶區域定義
+### 4.1 參數定義
 
-```
-┌──────────────────────────────────────────────────────┐
-│  ZONE 1：Shared Memory   memory/shared/               │
-│  ┌────────────────────────────────────────────────┐  │
-│  │  project.md     專案技術背景與架構               │  │
-│  │  conventions.md 程式碼規範、命名慣例             │  │
-│  │  decisions.md   跨 Agent 的重要決定              │  │
-│  └────────────────────────────────────────────────┘  │
-│  特性：所有 Agent 可讀寫 ｜ Git 追蹤 ｜ 永久保存    │
-├──────────────────────────────────────────────────────┤
-│  ZONE 2：Working Memory  memory/agents/{name}/        │
-│  ┌────────────────────────────────────────────────┐  │
-│  │  working.md     執行中的暫存思路與中間結果       │  │
-│  └────────────────────────────────────────────────┘  │
-│  特性：Agent 私有 ｜ 交接後清除 ｜ 可設定是否封存  │
-├──────────────────────────────────────────────────────┤
-│  ZONE 3：Handoff Memory  memory/handoffs/{run-id}/    │
-│  ┌────────────────────────────────────────────────┐  │
-│  │  01-fetcher.md  Claude 整理後的精華摘要（< 2K） │  │
-│  │  02-fixer.md    下一個 Agent 的「收件匣」        │  │
-│  └────────────────────────────────────────────────┘  │
-│  特性：唯讀（寫後不修改） ｜ Git 追蹤 ｜ 可統計   │
-└──────────────────────────────────────────────────────┘
+```bash
+source experts/build-expert/install.sh [OPTIONS]
+
+OPTIONS:
+  （無參數）          安裝此 Expert（symlink 模式，自動偵測場景）
+  --copy              安裝（複製模式，不建議，切換困難）
+  --uninstall         移除當前 Expert 的所有 links
+  --switch            切換（= uninstall + install + 印出 diff）
+  --target openclaw   安裝目標為 OpenClaw（未來）
+  --scenario VALUE    指定場景：agent-first 或 legacy（預設自動偵測）
+  --env-only          僅設定環境變數，不安裝 links
 ```
 
-### 4.2 記憶生命週期
-
-```mermaid
-stateDiagram-v2
-    [*] --> WorkingEmpty : Agent 啟動
-
-    WorkingEmpty --> WorkingActive : 注入 Handoff 文件\n+ 載入 Shared Memory
-
-    WorkingActive --> WorkingActive : 執行任務\n（持續寫入 working.md）
-
-    WorkingActive --> Summarizing : 任務完成\n觸發整理
-
-    Summarizing --> HandoffWritten : Claude 壓縮摘要\n寫入 handoffs/{run}/
-
-    HandoffWritten --> SharedUpdated : 有長期價值的知識\n寫回 shared/
-
-    SharedUpdated --> WorkingCleared : 清除 working.md
-
-    WorkingCleared --> GitCommitted : git commit\nhandoffs/ + shared/
-
-    GitCommitted --> [*]
-```
-
----
-
-## 5. 工作流程設計
-
-### 5.1 主流程
+### 4.2 install.sh 主流程
 
 ```mermaid
 flowchart TD
-    Start([使用者啟動]) --> FA[開啟 Featured Agent]
+    A[source install.sh] --> B{解析參數}
 
-    FA --> Detect{偵測任務類型}
+    B -->|--env-only| ENV[設定環境變數\n寫入 shell profile]
+    B -->|--uninstall| UNINST[移除 .claude/ 下所有 symlinks\n清除 .active-expert\n清除 CLAUDE.md]
+    B -->|--switch| SWITCH[讀取 .active-expert\n觸發 hand-off\n執行 uninstall\n執行 install\n印出 diff]
+    B -->|預設| DETECT
 
-    Detect -->|需要下載/編譯| CheckFetcher{fetcher 已安裝?}
-    Detect -->|已有 BUILD_FAILED| CheckFixer{fixer 已安裝?}
-    Detect -->|已有 BUILD_SUCCESS| CheckDev{developer 已安裝?}
+    DETECT{自動偵測場景}
+    DETECT -->|有 .repo| LEGACY[設定 CODE_SPACE = workspace root]
+    DETECT -->|無 .repo| AGFIRST[設定 CODE_SPACE = workspace/codespace]
 
-    CheckFetcher -->|否| PromptFetcher[輸出安裝提示\n並寫入交接文件]
-    CheckFetcher -->|是| RunFetcher[啟動 Fetcher Agent]
+    LEGACY & AGFIRST --> ENVSET[設定環境變數]
+    ENVSET --> CLONE{consys-memory 已存在?}
+    CLONE -->|否| GITCLONE[git clone consys-memory\n建立 employees/{id}/ 資料夾]
+    CLONE -->|是| LINKS
 
-    PromptFetcher --> UserInstall[使用者執行\ninstall-agent.sh fetcher]
-    UserInstall --> RunFetcher
-
-    RunFetcher --> BuildResult{編譯結果}
-
-    BuildResult -->|BUILD_FAILED| CheckFixer
-    BuildResult -->|BUILD_SUCCESS| CheckDev
-
-    CheckFixer -->|否| PromptFixer[輸出安裝提示]
-    CheckFixer -->|是| RunFixer[啟動 Fixer Agent]
-
-    PromptFixer --> UserInstall2[使用者執行\ninstall-agent.sh fixer]
-    UserInstall2 --> RunFixer
-
-    RunFixer --> FixResult{修復結果}
-
-    FixResult -->|FIX_SUCCESS| CheckDev
-    FixResult -->|FIX_FAILED| ManualIntervention[提示人工介入]
-
-    CheckDev -->|否| PromptDev[輸出安裝提示]
-    CheckDev -->|是| RunDev[啟動 Developer Agent]
-
-    PromptDev --> UserInstall3[使用者執行\ninstall-agent.sh developer]
-    UserInstall3 --> RunDev
-
-    RunDev --> Done([工作流程完成])
-
-    ManualIntervention --> Done
+    GITCLONE --> LINKS
+    LINKS[讀取 expert.json\n建立 common symlinks\n建立 private symlinks]
+    LINKS --> GENMD[生成 expert.md\n生成 CLAUDE.md]
+    GENMD --> ACTIVE[更新 .active-expert]
+    ACTIVE --> DONE[印出安裝摘要]
 ```
 
-### 5.2 交接時序圖
+### 4.3 切換 Expert 時的 diff 輸出
 
-```mermaid
-sequenceDiagram
-    actor User
-    participant Fetcher
-    participant Memory as Memory System
-    participant Git
-    participant Hook as on-agent-stop.sh
-    participant Fixer
+```
+$ source experts/cicd-expert/install.sh --switch
 
-    User->>Fetcher: run-agent.sh fetcher
+🔄 切換 Expert: build-expert → cicd-expert
+💾 儲存 build-expert 工作記憶...
 
-    Note over Fetcher: 注入 working.md\n（來自 featured 交接）
+技能變更清單：
+  ✓ 新增: pipeline-operations
+  ✓ 新增: ci-patterns
+  ✗ 移除: build-systems
+  ○ 保留（common）: expert-discovery
+  ○ 保留（common）: handoff-protocol
 
-    Fetcher->>Memory: 讀取 shared/project.md
-    Fetcher->>Fetcher: 執行下載 + 編譯
-    Fetcher->>Memory: 寫入 working.md（執行過程）
+工具變更清單：
+  ○ 保留（common）: /experts
+  ○ 保留（common）: /handoff
 
-    Note over Fetcher: 任務結束，觸發交接程序
+✅ cicd-expert 安裝完成
+   請重新開啟 Claude Code 以載入新 Expert
+```
 
-    Fetcher->>Memory: 整理 working.md → 摘要
-    Fetcher->>Memory: 有價值知識 → shared/decisions.md
-    Fetcher->>Memory: 寫入 handoffs/{run}/01-fetcher.md
-    Fetcher->>Memory: 清除 working.md
-    Fetcher-->>Hook: 輸出 HANDOFF_DONE:{...}
+### 4.4 實作方式（TBD）
 
-    Hook->>Git: git add memory/handoffs/ memory/shared/
-    Hook->>Git: git commit "handoff: fetcher BUILD_FAILED"
+install.sh 的實作語言保留彈性，可選擇：
 
-    Hook-->>User: ⚠️ 需要安裝 fixer Agent\n執行: install-agent.sh fixer
+| 方式 | 適用情境 |
+|------|---------|
+| Shell（bash/zsh） | 最輕量，無額外依賴，適合基本 symlink 操作 |
+| Python | 需要複雜 JSON 解析、跨平台時 |
+| TypeScript（npx ts-node） | 需要型別安全、與 Hook 共用邏輯時 |
+| Node.js（npx） | 需要 npm 生態工具時 |
 
-    User->>User: install-agent.sh fixer
+**本期建議**：Shell 為主，JSON 解析用 `jq` 或 Python 的 `json.tool`。
 
-    User->>Fixer: run-agent.sh fixer
+---
 
-    Note over Fixer: 注入 working.md\n（來自 01-fetcher.md 摘要）
+## 5. Skill 系統設計（Knowledge）
 
-    Fixer->>Memory: 讀取 handoffs/{run}/01-fetcher.md
-    Fixer->>Memory: 讀取 shared/（共用知識）
-    Fixer->>Fixer: 分析錯誤 + 修復
+### 5.1 SKILL.md 格式
+
+```yaml
+---
+name: build-systems
+description: "韌體編譯系統知識，包含 Android repo 工具使用、make 指令、編譯錯誤排查"
+version: "1.0.0"
+scope: build-expert          # all / build-expert / cicd-expert / ...
+tags:
+  - private                  # private = Expert 私有；shared = 所有 Expert 共用
+---
+
+# Build Systems
+
+## Android Repo 工具
+...
+
+## 編譯路徑
+預設 firmware build 目錄為 `$CONSYS_EXPERT_CODE_SPACE_PATH/fw/bora/build`
+使用 $CONSYS_EXPERT_CODE_SPACE_PATH 環境變數存取 code space。
+
+## 常見編譯錯誤
+...
+```
+
+### 5.2 expert-discovery SKILL.md（共用）
+
+```yaml
+---
+name: expert-discovery
+description: "列出所有可用的 Consys Expert，提供切換指引"
+version: "1.0.0"
+scope: all
+tags: [shared, required]
+---
+
+# 可用的 Consys Experts
+
+（此內容由 install.sh 從 registry.json 生成）
+
+| Expert 名稱 | 描述 | 觸發情境 | 安裝指令 |
+|------------|------|---------|---------|
+| build-expert | 韌體編譯專家 | build, compile, 編譯失敗 | source experts/build-expert/install.sh |
+| cicd-expert | CI/CD 流程專家 | push, pipeline, 上傳 | source experts/cicd-expert/install.sh |
+| device-expert | 裝置控制專家 | device, flash, 燒錄 | source experts/device-expert/install.sh |
+
+## 切換 Expert
+執行：`source $CONSYS_EXPERTS_PATH/experts/{name}/install.sh --switch`
 ```
 
 ---
 
-## 6. 元件設計
+## 6. CLAUDE.md 生成機制
 
-### 6.1 registry.json
+### 6.1 生成內容
+
+install.sh 在 `$CONSYS_EXPERTS_WORKSPACE_ROOT_PATH` 生成 `CLAUDE.md`：
+
+```markdown
+# Consys Expert: Build Expert
+
+@.claude/expert.md
+@.claude/expert.local.md
+```
+
+### 6.2 expert.md（由 install.sh 從 expert.json 生成）
+
+```markdown
+# Build Expert
+
+**版本**：1.0.0
+**描述**：專門處理韌體編譯、建置系統設定與編譯錯誤排查
+
+## 能力範圍
+- 使用 Android repo tool 管理多 repo 下載
+- 分析並修復編譯錯誤
+- 管理 fw / driver SDK codespace
+
+## 觸發情境
+build, compile, 編譯, BUILD_FAILED
+
+## 完成後交接至
+- BUILD_SUCCESS → cicd-expert
+- BUILD_FAILED → （等待 fixer 處理或人工介入）
+
+## 環境資訊
+- Workspace: $CONSYS_EXPERTS_WORKSPACE_ROOT_PATH
+- Code Space: $CONSYS_EXPERT_CODE_SPACE_PATH
+- Expert Repo: $CONSYS_EXPERTS_PATH
+
+## 個人客製化
+如需客製化此 Expert 的行為，請建立 `.claude/expert.local.md`。
+此檔案不會納入 consys-experts repo，僅對你個人生效。
+```
+
+---
+
+## 7. expert.json 格式
 
 ```json
 {
-  "schema_version": "1",
-  "agents": {
-    "featured": {
-      "bundled": true,
-      "description": "入口代理，任務偵測與安裝引導",
-      "shared_skills": ["project-context", "git-operations", "handoff-protocol"],
-      "private_skills": ["agent-discovery"]
-    },
-    "fetcher": {
-      "bundled": false,
-      "description": "下載專案並執行編譯",
-      "install_cmd": "./scripts/install-agent.sh fetcher",
-      "triggers": ["clone", "download", "build", "compile", "編譯"],
-      "shared_skills": ["project-context", "git-operations", "build-systems", "handoff-protocol"],
-      "private_skills": ["build-advanced"],
-      "transitions": {
-        "BUILD_SUCCESS": "developer",
-        "BUILD_FAILED": "fixer"
-      }
-    },
-    "fixer": {
-      "bundled": false,
-      "description": "分析並修復編譯錯誤",
-      "install_cmd": "./scripts/install-agent.sh fixer",
-      "triggers": ["BUILD_FAILED", "error", "fix", "修復"],
-      "shared_skills": ["project-context", "code-reading", "handoff-protocol"],
-      "private_skills": ["error-patterns"],
-      "transitions": {
-        "FIX_SUCCESS": "developer",
-        "FIX_FAILED": null
-      }
-    },
-    "developer": {
-      "bundled": false,
-      "description": "在成功編譯的專案上新增功能",
-      "install_cmd": "./scripts/install-agent.sh developer",
-      "triggers": ["BUILD_SUCCESS", "FIX_SUCCESS", "feature", "新增功能"],
-      "shared_skills": ["project-context", "code-reading", "handoff-protocol"],
-      "private_skills": ["feature-patterns"],
-      "transitions": {}
-    }
-  }
+  "name": "build-expert",
+  "display_name": "Build Expert",
+  "description": "專門處理韌體編譯、建置系統設定與編譯錯誤排查",
+  "version": "1.0.0",
+  "author": "consys-team",
+  "triggers": ["build", "compile", "編譯", "BUILD_FAILED"],
+  "transitions": {
+    "BUILD_SUCCESS": "cicd-expert",
+    "BUILD_FAILED": null
+  },
+  "knowledge": {
+    "shared": ["expert-discovery", "handoff-protocol"],
+    "private": ["build-systems"]
+  },
+  "workflow": {
+    "shared": ["session-start", "session-end", "pre-compact", "mid-session-checkpoint"]
+  },
+  "tool": {
+    "shared": ["experts", "handoff"]
+  },
+  "external": [],
+  "scenarios": ["agent-first", "legacy"],
+  "human_in_the_loop": {
+    "require_confirm": ["git push", "device flash", "rm -rf"]
+  },
+  "dependencies": []
 }
 ```
 
-### 6.2 agent-config.json
+---
 
-```json
-{
-  "_doc": "修改此檔案調整系統行為，所有值均有預設",
+## 8. 記憶系統設計（Workflow）
 
-  "memory": {
-    "shared_zone_enabled": true,
-    "auto_summarize_before_handoff": true,
-    "summarize_max_tokens": 2000,
-    "clear_working_memory_after_handoff": true,
-    "archive_before_clear": false,
-    "archive_path": "memory/archive/"
-  },
+### 8.1 四個 Hook 存檔點
 
-  "skills": {
-    "shared_path": ".claude/skills",
-    "on_demand": true,
-    "always_load": ["project-context", "handoff-protocol"]
-  },
+參考 claude-memory-engine 的設計，採三層存檔保護：
 
-  "handoff": {
-    "agent_install_mode": "manual",
-    "auto_git_commit": true,
-    "git_remote": "origin",
-    "git_branch": "main",
-    "notify_user_on_missing_agent": true
-  },
-
-  "hooks": {
-    "on_agent_stop": {
-      "enabled": true,
-      "summarize_memory": true,
-      "git_commit_handoff": true
-    },
-    "on_write": {
-      "enabled": true,
-      "auto_commit_handoffs": true
-    }
-  }
-}
+```
+存檔可靠性排序（高 → 低）：
+1. pre-compact     ← 最可靠（context 壓縮前，有最完整上下文）
+2. mid-checkpoint  ← 每 20 訊息（防止長 session 遺失）
+3. session-end     ← best-effort（對話結束後）
+4. session-start   ← 載入（不存檔，只讀取）
 ```
 
-### 6.3 交接文件格式（Handoff Document）
+### 8.2 記憶生命週期
+
+```mermaid
+stateDiagram-v2
+    [*] --> SessionStart : 開啟 Claude Code
+
+    SessionStart --> Active : session-start hook\n載入上次摘要 + 偵測 hand-off
+
+    Active --> Active : 執行任務\n（每 20 訊息 mid-checkpoint）
+
+    Active --> PreCompact : context 快滿\npre-compact hook 觸發
+
+    PreCompact --> Active : 快照存檔完成\ncontext 被壓縮
+
+    Active --> HandoffTriggered : 切換 Expert\n或手動 /handoff
+
+    HandoffTriggered --> HandoffSaved : 整理摘要（< 2000 tokens）\n寫入 consys-memory/handoffs/
+
+    HandoffSaved --> GitPushed : git push consys-memory
+
+    Active --> SessionEnd : 對話結束\nsession-end hook
+
+    SessionEnd --> GitPushed : 儲存 session 摘要\ngit push consys-memory
+
+    GitPushed --> [*]
+```
+
+### 8.3 consys-memory Repo 結構
+
+```
+consys-memory/ (git)
+├── README.md
+└── employees/
+    ├── john.doe/
+    │   ├── sessions/
+    │   │   ├── 2026-03-23.md        ← 當日 session 摘要
+    │   │   └── 2026-03-22.md
+    │   ├── handoffs/
+    │   │   └── {run-id}.md          ← Expert 切換時的交接文件
+    │   └── summary.md               ← 長期累積摘要
+    └── jane.smith/
+        └── ...
+```
+
+---
+
+## 9. Hand-off 文件格式
 
 ```markdown
 ---
 schema: handoff-v1
-run_id: "20240320-143022"
+run_id: "20260323-143022"
 sequence: 1
-from: fetcher
-to: fixer
-status: BUILD_FAILED
-timestamp: "2024-03-20T14:30:22Z"
-metrics:
-  duration_seconds: 45
-  tokens_estimated: 8500
-memory_cleared: true
+from: build-expert
+to: cicd-expert
+status: BUILD_SUCCESS
+timestamp: "2026-03-23T14:30:22Z"
+workspace: /home/john.doe/workspace
+code_space: /home/john.doe/workspace/codespace/fw
+employee_id: john.doe
 ---
 
 ## 任務摘要
-（3句話內）下載 my-project 並嘗試編譯，在 src/main.c:42
-發現型別不匹配錯誤（int vs char*），編譯失敗。
+成功編譯 bora fw（fw/bora/build），make all 通過，artifact 位於 fw/bora/build/out/。
 
 ## 關鍵發現
-- 專案使用 GNU Make，進入點為 `make all`
-- 錯誤位置：`src/main.c` 第 42 行
-- 錯誤訊息：`incompatible pointer types passing 'char *' to parameter of type 'int'`
-- 相關函式：`process_input(int flags)`
+- 編譯指令：`make -C $CONSYS_EXPERT_CODE_SPACE_PATH/fw/bora/build all -j8`
+- 輸出目錄：`fw/bora/build/out/`
+- 重要設定：需先 source setup.sh
 
 ## 建議下一步
-1. 將 `src/main.c:42` 的 `char *input` 改為 `int flags`
-2. 重新執行 `make all` 驗證
-3. 若有其他相依錯誤，繼續修復
+1. 執行 CI/CD pipeline，上傳 artifact
+2. 注意：push 前需確認 remote 分支
 
 ## 上下文資料
-- project_path: /tmp/my-project
-- build_command: make all
-- error_file: src/main.c
-- shared_memory_updated: true
+- build_command: make all -j8
+- artifact_path: $CONSYS_EXPERT_CODE_SPACE_PATH/fw/bora/build/out/
+- duration_seconds: 120
 ```
 
 ---
 
-## 7. Hook 設計
+## 10. 遷移路線
 
-### 7.1 Hook 事件對應
-
-| 事件 | 觸發時機 | 對應 Script | 行為 |
-|------|----------|-------------|------|
-| `SubagentStop` | Agent 執行結束 | `on-agent-stop.sh` | 整理記憶、git commit、提示使用者 |
-| `PostToolUse[Write]` | 寫入任何檔案 | `on-write.sh` | 若寫入 handoffs/ 則自動 git commit |
-| `SessionStart` | Claude Code 啟動 | （預留）| 未來：自動注入交接文件 |
-
-### 7.2 settings.json
-
-```json
-{
-  "hooks": {
-    "SubagentStop": [
-      {
-        "matcher": ".*",
-        "hooks": [{
-          "type": "command",
-          "command": "bash scripts/hooks/on-agent-stop.sh"
-        }]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Write",
-        "hooks": [{
-          "type": "command",
-          "command": "bash scripts/hooks/on-write.sh"
-        }]
-      }
-    ]
-  },
-  "permissions": {
-    "allow": [
-      "Bash(git:*)",
-      "Bash(bash scripts/*)"
-    ]
-  }
-}
-```
-
----
-
-## 8. 安裝腳本設計
-
-### 8.1 install-agent.sh 流程
-
-```mermaid
-flowchart TD
-    A[install-agent.sh AGENT_NAME] --> B{registry.json\n中存在?}
-    B -->|否| ERR1[錯誤：列出可用 Agent]
-    B -->|是| C[建立 agents/AGENT/skills/ 目錄]
-    C --> D[讀取 registry.json\n取得 shared_skills 清單]
-    D --> E{迴圈每個 shared_skill}
-    E --> F{.claude/skills/SKILL\n資料夾存在?}
-    F -->|否| WARN[警告：略過此技能]
-    F -->|是| G{symlink 已存在?}
-    G -->|是| SKIP[略過]
-    G -->|否| H[ln -s 建立 symlink]
-    H --> E
-    SKIP --> E
-    WARN --> E
-    E -->|迴圈結束| I[驗證 SOUL.md 存在]
-    I --> J{有待接交接文件?}
-    J -->|是| K[提示: run-agent.sh AGENT_NAME]
-    J -->|否| L[安裝完成]
-    K --> L
-```
-
-### 8.2 run-agent.sh 流程
-
-```mermaid
-flowchart TD
-    A[run-agent.sh AGENT_NAME] --> B{Agent 已安裝?}
-    B -->|否| ERR[提示先執行 install-agent.sh]
-    B -->|是| C[尋找最新交接文件\nmemory/handoffs/]
-    C --> D{找到交接文件?}
-    D -->|是| E[解析交接文件\n注入 memory/agents/AGENT/working.md]
-    D -->|否| F[清空 working.md\n寫入「無前置交接」]
-    E --> G[產生 run-id]
-    F --> G
-    G --> H[輸出啟動指引]
-    H --> I[提示使用者在 Claude Code\n開啟 agents/AGENT/ 目錄]
-```
-
----
-
-## 9. 資料流設計
+### 10.1 三階段遷移
 
 ```mermaid
 flowchart LR
-    subgraph Input
-        User([使用者])
-        PrevHandoff[前一個交接文件]
+    subgraph Phase1["Phase 1：Claude Code（現在）"]
+        P1A[install.sh\nsymlink]
+        P1B[JS Hooks]
+        P1C[SKILL.md]
+        P1D[consys-memory\nMarkdown + Git]
+        P1E[Human in the Loop\n手動確認]
     end
 
-    subgraph Agent Execution
-        WM[Working Memory\nworking.md]
-        SM[Shared Memory\nshared/]
-        Skills[Skill 讀取\n按需載入]
-        Claude[Claude 執行]
+    subgraph Phase2["Phase 2：OpenClaw"]
+        P2A[install.sh --target openclaw\n+ openclaw install]
+        P2B[TypeScript handler.ts]
+        P2C[SKILL.md\n（frontmatter 加 openclaw metadata）]
+        P2D[MEMORY.md\n+ LanceDB]
+        P2E[Hook 觸發\n確認機制]
     end
 
-    subgraph Output
-        NewHandoff[新交接文件\nhandoffs/run/]
-        UpdatedShared[更新的 Shared\nshared/decisions.md]
-        ClearedWM[清空的 Working\nworking.md]
+    subgraph Phase3["Phase 3：ADK/SDK（全自動）"]
+        P3A[AgentDefinition\n自動 install]
+        P3B[PostToolUse callback]
+        P3C[system_prompt\n知識注入]
+        P3D[JSON output_format]
+        P3E[風險評分\n自動決定介入等級]
     end
 
-    subgraph Persistence
-        Git[(Git Repository)]
-    end
-
-    User --> Claude
-    PrevHandoff --> WM
-    WM --> Claude
-    SM --> Claude
-    Skills --> Claude
-    Claude --> WM
-    Claude -->|整理摘要| NewHandoff
-    Claude -->|長期知識| UpdatedShared
-    Claude -->|清除| ClearedWM
-    NewHandoff --> Git
-    UpdatedShared --> Git
-```
-
----
-
-## 10. 遷移至 OpenClaw
-
-### 10.1 OpenClaw 目錄結構對應
-
-```
-~/.openclaw/
-├── openclaw.json                    ← 取代 registry.json + agent-config.json
-├── workspace/                       ← 預設工作區（對應現有 project-root/）
-│   ├── SOUL.md                      ← 直接對應，格式相容
-│   ├── IDENTITY.md                  ← 新增：Agent 對外公開的身份卡
-│   ├── AGENTS.md                    ← 取代 DUTIES.md（規則 + 交接程序寫在此）
-│   ├── USER.md                      ← 新增：使用者偏好設定
-│   ├── TOOLS.md                     ← 新增：本地工具設定（SSH、相機、語音）
-│   ├── HEARTBEAT.md                 ← 新增：排程任務定義
-│   ├── MEMORY.md                    ← 取代 memory/shared/（長期記憶）
-│   ├── memory/
-│   │   ├── YYYY-MM-DD.md            ← 取代 memory/agents/{name}/working.md
-│   │   └── lancedb/                 ← 新增：向量搜尋索引（混合檢索）
-│   ├── skills/                      ← 工作區層技能（取代 agents/{name}/skills/）
-│   │   ├── project-context/SKILL.md ← 直接遷移，frontmatter 加 openclaw metadata
-│   │   ├── git-operations/SKILL.md
-│   │   ├── build-systems/SKILL.md
-│   │   ├── handoff-protocol/SKILL.md
-│   │   └── {agent-private}/SKILL.md ← 私有技能直接放工作區
-│   └── hooks/
-│       └── handoff-commit/          ← 取代 scripts/hooks/on-agent-stop.sh
-│           ├── HOOK.md
-│           └── handler.ts           ← TypeScript，取代 bash script
-│
-├── skills/                          ← 全域技能（取代 .claude/skills/）
-│   └── {skill-name}/SKILL.md        ← 所有 workspace 共用，symlink 不再需要
-│
-└── agents/
-    └── {agent-id}/sessions/         ← Session 儲存
+    P1A -->|script → CLI| P2A
+    P1B -->|JS → TypeScript| P2B
+    P1C -->|加 metadata| P2C
+    P1D -->|Markdown → LanceDB| P2D
+    P1E -->|手動 → Hook| P2E
+    P2A -->|CLI → SDK| P3A
+    P2B -->|hook → callback| P3B
+    P2C -->|SKILL → prompt| P3C
+    P2D -->|memory → JSON| P3D
+    P2E -->|Hook → 評分| P3E
 ```
 
 ### 10.2 元件對應關係
 
-```mermaid
-graph LR
-    subgraph 現有 Claude Code 設計
-        CC_SOUL[SOUL.md]
-        CC_DUTIES[DUTIES.md]
-        CC_SKILLS[.claude/skills/\n共用技能庫]
-        CC_SYMLINK[agents/.../skills/\nsymlink]
-        CC_MEM_S[memory/shared/]
-        CC_MEM_W[memory/agents/\nworking.md]
-        CC_MEM_H[memory/handoffs/]
-        CC_REG[registry.json]
-        CC_CFG[agent-config.json]
-        CC_HOOK[hooks/*.sh\nbash]
-        CC_INST[install-agent.sh]
-    end
+| 現有（Claude Code） | Phase 2（OpenClaw） | Phase 3（ADK/SDK） |
+|--------------------|--------------------|--------------------|
+| `consys-experts/experts/*/CLAUDE.md` | `workspace/SOUL.md` | `system_prompt` |
+| `.claude/skills/` symlinks | `~/.openclaw/skills/`（全域）| `knowledge` 參數 |
+| `.claude/hooks/` JS | `workspace/hooks/handler.ts` | `PostToolUse callback` |
+| `.claude/commands/` | `workspace/skills/`（user-invocable）| SDK tool 定義 |
+| `consys-memory/` Markdown | `workspace/MEMORY.md` + LanceDB | JSON output |
+| `install.sh` | `openclaw install` / ClaWHub | `AgentDefinition` |
+| `registry.json` | `~/.openclaw/openclaw.json` | SDK Agent registry |
+| `expert.json` | workspace config | `AgentDefinition` schema |
 
-    subgraph OpenClaw 原生
-        OC_SOUL[workspace/SOUL.md]
-        OC_AGENTS[workspace/AGENTS.md]
-        OC_GSKILL[~/.openclaw/skills/\n全域技能]
-        OC_WSKILL[workspace/skills/\n工作區技能]
-        OC_MEMORY[workspace/MEMORY.md\n+ LanceDB]
-        OC_DAILY[memory/YYYY-MM-DD.md]
-        OC_HAND[自訂 handoff Skill\n+ memory/handoffs/]
-        OC_JSON[openclaw.json\nagents 陣列]
-        OC_HOOK[workspace/hooks/\nhandler.ts TypeScript]
-        OC_INST[openclaw install\nClaWHub]
-    end
+### 10.3 SKILL.md 遷移格式
 
-    CC_SOUL -->|直接對應| OC_SOUL
-    CC_DUTIES -->|整合| OC_AGENTS
-    CC_SKILLS -->|升級| OC_GSKILL
-    CC_SYMLINK -->|取代| OC_WSKILL
-    CC_MEM_S -->|整合| OC_MEMORY
-    CC_MEM_W -->|對應| OC_DAILY
-    CC_MEM_H -->|自訂實作| OC_HAND
-    CC_REG & CC_CFG -->|合併| OC_JSON
-    CC_HOOK -->|重寫| OC_HOOK
-    CC_INST -->|取代| OC_INST
-```
-
-### 10.3 SKILL.md 格式遷移
-
-**現有格式（Claude Code）**：
+**現有（Claude Code）**：
 ```yaml
 ---
-name: project-context
-description: 專案背景知識
-version: 1.0
-tags: [shared, required]
-scope: all
----
-```
-
-**遷移後格式（OpenClaw 相容）**：
-```yaml
----
-name: project-context
-description: "專案背景知識，包含架構決策與技術選型。適用於所有 Agent 啟動時。"
+name: build-systems
+description: 韌體編譯系統知識
 version: "1.0.0"
-metadata: {
-  "openclaw": {
-    "emoji": "📚",
-    "always": true,
-    "requires": {
-      "config": ["memory/shared/project.md"]
-    },
-    "user-invocable": false
-  }
-}
+scope: build-expert
+tags: [private]
 ---
-# 內容（與現有相同，無需修改）
 ```
 
-> **注意**：只需在 frontmatter 加入 `metadata.openclaw` 區塊，內容本身完全相容。
-
-### 10.4 Hook 遷移：bash → TypeScript
-
-**現有（`scripts/hooks/on-agent-stop.sh`）**：
-```bash
-#!/bin/bash
-git add memory/handoffs/ memory/shared/
-git commit -m "handoff: $(date)"
+**Phase 2（OpenClaw 相容，只需加 metadata 區塊）**：
+```yaml
+---
+name: build-systems
+description: 韌體編譯系統知識
+version: "1.0.0"
+scope: build-expert
+tags: [private]
+metadata:
+  openclaw:
+    emoji: "🔨"
+    always: false
+    user-invocable: false
+---
 ```
 
-**遷移後（`workspace/hooks/handoff-commit/handler.ts`）**：
-```typescript
-import type { HookHandler } from "@openclaw/sdk";
-import { execSync } from "child_process";
-
-// HOOK.md 中宣告事件：session:end
-const handler: HookHandler = async (ctx, event) => {
-  const { workspacePath, agentId } = ctx;
-  const handoffDir = `${workspacePath}/memory/handoffs`;
-
-  // 1. git commit 交接文件與共用記憶
-  execSync(`git -C ${workspacePath} add memory/handoffs/ MEMORY.md`);
-  execSync(
-    `git -C ${workspacePath} commit -m "handoff: ${agentId} ${event.data?.status ?? 'completed'} at ${new Date().toISOString()}"`,
-    { stdio: "pipe" }
-  );
-
-  // 2. 透過 Gateway RPC 通知使用者
-  await ctx.rpc("chat.send", {
-    message: `✅ ${agentId} 交接完成，交接文件已 commit。`,
-  });
-
-  return { success: true };
-};
-
-export default handler;
-```
-
-### 10.5 交接（Handoff）機制 OpenClaw 實作
-
-OpenClaw 本身無原生交接機制，以 **自訂 Skill + 工作區記憶** 實作：
-
-```
-workspace/
-├── skills/
-│   └── handoff-protocol/
-│       └── SKILL.md          ← 交接規範（與現有格式相同）
-├── memory/
-│   └── handoffs/             ← 保留現有交接文件目錄
-│       └── {run-id}/
-│           └── 01-fetcher.md
-└── hooks/
-    ├── handoff-commit/       ← session:end 時 git commit
-    │   ├── HOOK.md
-    │   └── handler.ts
-    └── handoff-inject/       ← session:start 時注入前次交接文件
-        ├── HOOK.md
-        └── handler.ts        ← 讀取最新 handoffs/ 寫入今日 daily log
-```
-
-**`handoff-inject/handler.ts`（session:start 注入）**：
-```typescript
-import type { HookHandler } from "@openclaw/sdk";
-import { readFileSync, readdirSync } from "fs";
-import { join } from "path";
-
-const handler: HookHandler = async (ctx) => {
-  const handoffsDir = join(ctx.workspacePath, "memory", "handoffs");
-
-  // 找最新交接文件
-  const runs = readdirSync(handoffsDir).sort().reverse();
-  if (!runs.length) return {};
-
-  const latestRun = runs[0];
-  const files = readdirSync(join(handoffsDir, latestRun)).sort().reverse();
-  if (!files.length) return {};
-
-  const handoff = readFileSync(
-    join(handoffsDir, latestRun, files[0]),
-    "utf-8"
-  );
-
-  // 注入到今日 daily log 的開頭
-  const today = new Date().toISOString().split("T")[0];
-  const dailyPath = join(ctx.workspacePath, "memory", `${today}.md`);
-  const existing = existsSync(dailyPath) ? readFileSync(dailyPath, "utf-8") : "";
-
-  writeFileSync(
-    dailyPath,
-    `## 交接文件注入（${latestRun}）\n\n${handoff}\n\n---\n\n${existing}`
-  );
-
-  return {};
-};
-export default handler;
-```
-
-### 10.6 openclaw.json 設計（取代 registry.json + agent-config.json）
-
-```json5
-{
-  // Agent 設定（取代 registry.json）
-  "agents": [
-    {
-      "id": "featured",
-      "name": "Featured Agent",
-      "description": "入口代理，任務偵測與 Agent 引導",
-      "workspace": "~/.openclaw/workspace/featured",
-      "model": { "primary": "anthropic/claude-opus-4-6" },
-      "permissions": { "allowedCommands": ["read", "write", "bash", "edit"] }
-    },
-    {
-      "id": "fetcher",
-      "name": "Fetcher Agent",
-      "description": "下載專案並執行編譯",
-      "workspace": "~/.openclaw/workspace/fetcher",
-      "model": { "primary": "anthropic/claude-opus-4-6" },
-      "permissions": { "allowedCommands": ["read", "write", "bash", "edit"] }
-    },
-    {
-      "id": "fixer",
-      "name": "Fixer Agent",
-      "description": "分析並修復編譯錯誤",
-      "workspace": "~/.openclaw/workspace/fixer",
-      "model": { "primary": "anthropic/claude-opus-4-6" }
-    },
-    {
-      "id": "developer",
-      "name": "Developer Agent",
-      "description": "在成功編譯的專案上新增功能",
-      "workspace": "~/.openclaw/workspace/developer",
-      "model": { "primary": "anthropic/claude-opus-4-6" }
-    }
-  ],
-
-  // 技能載入設定（取代 agent-config.json skills 區塊）
-  "skills": {
-    "load": {
-      "watch": true,
-      "watchDebounceMs": 250,
-      "extraDirs": ["~/.openclaw/workspace/shared-skills"]
-    }
-  },
-
-  // 記憶設定（取代 agent-config.json memory 區塊）
-  "memory": {
-    "provider": "lancedb",
-    "path": "~/.openclaw/workspace/memory/lancedb"
-  },
-
-  // Hooks 設定
-  "hooks": {
-    "internal": {
-      "entries": {
-        "boot-md": {},
-        "session-memory": {},
-        "handoff-inject": { "enabled": true },
-        "handoff-commit": { "enabled": true }
-      }
-    }
-  }
-}
-```
-
-### 10.7 遷移時序
-
-```mermaid
-gantt
-    title 遷移計畫（Claude Code → OpenClaw → ADK/SDK）
-    dateFormat  YYYY-MM
-    section Phase 1：Claude Code（驗證期）
-    架構設計與需求確認         :done, p1a, 2024-03, 2024-04
-    Claude Code 手動工作流驗證 :active, p1b, 2024-04, 2024-06
-    交接文件格式確認與穩定化   :p1c, 2024-04, 2024-05
-
-    section Phase 2：OpenClaw（整合期）
-    SKILL.md frontmatter 升級  :p2a, 2024-06, 2024-07
-    bash Hooks → TS handler.ts :p2b, 2024-06, 2024-07
-    memory/ → MEMORY.md+LanceDB:p2c, 2024-07, 2024-08
-    registry.json → openclaw.json:p2d, 2024-07, 2024-08
-    IM 渠道整合（飛書/Telegram):p2e, 2024-08, 2024-09
-
-    section Phase 3：ADK/SDK（自動化期）
-    AgentDefinition 化          :p3a, 2024-09, 2024-11
-    Featured Agent 自動安裝      :p3b, 2024-10, 2024-11
-    output_format JSON 交接      :p3c, 2024-09, 2024-10
-```
+> 內容本身完全不需修改，只需在 frontmatter 加入 `metadata.openclaw` 區塊。
 
 ---
 
-## 11. 未來遷移路徑（OpenClaw → ADK/SDK）
+## 11. 名詞定義
 
-### 11.1 元件對應
-
-| OpenClaw 元件 | ADK/SDK 對應 |
-|--------------|-------------|
-| `workspace/SOUL.md` + `AGENTS.md` | `AgentDefinition(description=..., prompt=...)` |
-| `~/.openclaw/skills/` | `system_prompt` 中的知識注入 |
-| `memory/handoffs/*.md` | 結構化 `output_format` JSON schema |
-| `hooks/handler.ts` | `PostToolUse` callback |
-| `openclaw.json` agents[] | `ClaudeAgentOptions` 參數 |
-| Gateway WebSocket | `ClaudeSDKClient` 長連接 |
-| 多渠道（IM）觸發 | `query()` API 呼叫 |
-
----
-
-## 12. 設計決策紀錄（ADR）
-
-| # | 決策 | 原因 | 取捨 |
-|---|------|------|------|
-| ADR-01 | Skill 以資料夾格式儲存（非單一檔案） | 與 OpenClaw SKILL.md 格式完全相容，未來可擴充 | 略增目錄複雜度 |
-| ADR-02 | Skill 共用以 symlink 實作（Phase 1） | 避免複製；Phase 2 遷移後由 OpenClaw 全域層取代 | Windows 不支援（本期限制） |
-| ADR-03 | 工作記憶交接後清除 | 避免 Context 爆炸；OpenClaw daily log 機制自然支援 | 需要完善摘要機制 |
-| ADR-04 | 交接文件採 Markdown + YAML frontmatter | 人可讀、Git diff 友好；與 OpenClaw SKILL.md 格式一致 | 不如純 JSON 嚴格 |
-| ADR-05 | run-id 採 timestamp | 簡單、不依賴外部服務；OpenClaw session ID 可作替代 | 極低機率衝突 |
-| ADR-06 | Agent 安裝預設手動 | 本期驗證安全性；Phase 2 改用 `openclaw install` | 需使用者額外操作 |
-| ADR-07 | SOUL.md 格式優先對齊 OpenClaw | 降低 Phase 2 遷移成本，Claude Code 與 OpenClaw 均可直接使用 | OpenClaw 特有欄位在 Claude Code 期間為空 |
-| ADR-08 | 交接機制在 OpenClaw 以自訂 Skill + Hook 實作 | OpenClaw 無原生交接概念，但 Hook 系統足以模擬 | 需維護 2 個 Hook（inject + commit） |
-| ADR-09 | hooks 從 bash 設計為可轉 TypeScript | Phase 2 直接重寫為 handler.ts，邏輯不變只換語言 | 需學習 OpenClaw Hook SDK |
+| 術語 | 定義 |
+|------|------|
+| Consys Expert | Agent 能力 + Consys Workflow（hooks）+ Consys Tool（commands）+ Consys Knowledge（skills）的組合體 |
+| Harness Engineering | 為 AI 打造一套自動化治理體系（上下文工程 + 架構約束 + 垃圾回收） |
+| consys-experts | 團隊共同維護的 Expert 工具 repo |
+| consys-memory | 後臺資料收集 repo，以員工工號（git username）為子資料夾 |
+| install.sh | 安裝腳本，建立 symlinks，生成 CLAUDE.md，設定環境變數 |
+| `CONSYS_EXPERTS_PATH` | consys-experts repo 路徑 |
+| `CONSYS_EXPERTS_WORKSPACE_ROOT_PATH` | 工作根目錄（.claude/ 所在）|
+| `CONSYS_EXPERT_CODE_SPACE_PATH` | 程式碼路徑（Agent First: codespace/；Legacy: workspace 根目錄）|
+| `CONSYS_MEMORY_PATH` | consys-memory repo 路徑 |
+| `CONSYS_EMPLOYEE_ID` | 員工工號，自動從 git config user.name 取得 |
+| Human in the Loop | 對高風險操作暫停等待人類確認的機制 |
