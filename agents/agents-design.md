@@ -1,8 +1,8 @@
 # Consys Experts — 設計書
 
-**文件版本**：v2.6
+**文件版本**：v2.7
 **狀態**：Draft
-**依據**：agents-requirements.md v2.5
+**依據**：agents-requirements.md v2.6
 
 > **注意**：本文件中所列的 expert、skill 名稱均為**示例**，用於說明命名規則與架構設計。實際 expert 與 skill 的規劃以團隊討論為準。
 
@@ -28,7 +28,37 @@
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 1.2 Consys Expert 組成
+### 1.2 Hook 實作語言優先策略
+
+Hooks 是 Consys Expert Harness 的行為骨幹，其實作語言直接影響團隊的維護成本。採用以下優先順序：
+
+```
+優先順序：Shell（預設）→ Python（複雜邏輯）→ JS（OpenClaw 遷移備用）
+
+判斷原則：
+  ① 能用 Shell 解決的，就用 Shell
+     - 適合：git 操作、檔案讀寫、環境變數、簡單字串處理
+     - 優點：所有開發環境普遍存在，無需額外 runtime，韌體工程師熟悉
+
+  ② Shell 難以維護時，改用 Python
+     - 適合：JSON/YAML 解析、複雜字串處理、API 呼叫、跨平台邏輯
+     - 優點：韌體團隊的第二語言，函式庫豐富（GitPython、requests）
+     - 慣例：Shell hook 以 subprocess 呼叫 Python helper（同名 .py 檔）
+
+  ③ JS 為最後考慮，保留作為 OpenClaw 遷移路徑
+     - 適合：Phase 2 OpenClaw 遷移時，TypeScript 重寫的過渡期
+     - 原則：Phase 1 不主動新增 JS hooks
+```
+
+**檔案命名慣例**：
+
+| 情況 | 命名 | 範例 |
+|------|------|------|
+| 純 Shell | `{name}.sh` | `session-start.sh` |
+| Shell + Python helper | `{name}.sh` + `{name}-helper.py` | `session-end.sh` + `session-end-helper.py` |
+| 複雜邏輯獨立為 Python | `{name}.py`（由 Shell wrapper 呼叫）| `compress-memory.py` |
+
+### 1.3 Consys Expert 組成
 
 ```
 Consys Expert = Agent 核心能力 + Workflow（hooks）+ Tool（commands）+ Knowledge（skills）
@@ -149,7 +179,7 @@ consys-experts/
 │       └── report/        ← 執行過程、結果、token 用量
 │
 ├── hooks/                 ← Workflow：針對此 expert 的額外 hook（可選）
-│   └── {hook-name}.js     ← Claude Code 實作（project level）
+│   └── {hook-name}.sh     ← Shell 優先；複雜邏輯用 {hook-name}-helper.py
 │
 ├── commands/              ← Tool：多個 command 資料夾
 │   └── {domain}-{name}-tool/
@@ -291,12 +321,13 @@ consys-experts/ (git)
 │   │   │   │   │   └── SKILL.md
 │   │   │   │   └── framework-memory-tool/
 │   │   │   │       └── SKILL.md
-│   │   │   ├── hooks/                       ← 所有 Expert 共用的 hooks（Claude Code 實作）
-│   │   │   │   ├── session-start.js
-│   │   │   │   ├── session-end.js
-│   │   │   │   ├── pre-compact.js
-│   │   │   │   ├── mid-session-checkpoint.js
-│   │   │   │   └── shared-utils.js
+│   │   │   ├── hooks/                       ← 所有 Expert 共用的 hooks（Shell 優先）
+│   │   │   │   ├── session-start.sh         ← 載入交接文件與共用記憶
+│   │   │   │   ├── session-end.sh           ← 儲存記憶、push consys-memory
+│   │   │   │   ├── pre-compact.sh           ← context 壓縮前存快照
+│   │   │   │   ├── mid-session-checkpoint.sh← 每 20 訊息存檔
+│   │   │   │   ├── shared-utils.sh          ← 共用 Shell functions
+│   │   │   │   └── memory-helper.py         ← 複雜記憶操作（JSON/YAML 解析等）
 │   │   │   ├── commands/
 │   │   │   │   ├── framework-experts-tool/
 │   │   │   │   │   └── COMMAND.md
@@ -592,12 +623,13 @@ install.sh 讀取 `expert.json` 的 `dependencies` + `private`，依序在 works
 │   ├── wifi-build-flow                     → $CONSYS_EXPERTS_PATH/wifi/experts/wifi-build-expert/skills/wifi-build-flow/
 │   └── wifi-builderror-knowhow             → $CONSYS_EXPERTS_PATH/wifi/experts/wifi-build-expert/skills/wifi-builderror-knowhow/
 │
-├── hooks/                                  ← 來自 framework-common-expert（Claude Code 實作）
-│   ├── session-start.js          → $CONSYS_EXPERTS_PATH/framework/experts/framework-common-expert/hooks/session-start.js
-│   ├── session-end.js            → .../framework-common-expert/hooks/session-end.js
-│   ├── pre-compact.js            → .../framework-common-expert/hooks/pre-compact.js
-│   ├── mid-session-checkpoint.js → .../framework-common-expert/hooks/mid-session-checkpoint.js
-│   └── shared-utils.js           → .../framework-common-expert/hooks/shared-utils.js
+├── hooks/                                  ← 來自 framework-common-expert（Shell 優先）
+│   ├── session-start.sh          → $CONSYS_EXPERTS_PATH/framework/experts/framework-common-expert/hooks/session-start.sh
+│   ├── session-end.sh            → .../framework-common-expert/hooks/session-end.sh
+│   ├── pre-compact.sh            → .../framework-common-expert/hooks/pre-compact.sh
+│   ├── mid-session-checkpoint.sh → .../framework-common-expert/hooks/mid-session-checkpoint.sh
+│   ├── shared-utils.sh           → .../framework-common-expert/hooks/shared-utils.sh
+│   └── memory-helper.py          → .../framework-common-expert/hooks/memory-helper.py
 │
 ├── commands/
 │   ├── framework-experts-tool    → .../framework-common-expert/commands/framework-experts-tool/
@@ -736,14 +768,16 @@ build, compile, 編譯, BUILD_FAILED
 
 ## 9. 記憶系統設計
 
-### 9.1 四個 Hook 存檔點（Claude Code 實作，project level）
+### 9.1 四個 Hook 存檔點（Shell 優先實作，project level）
 
 ```
 存檔可靠性：
-1. pre-compact     ← 最可靠（context 壓縮前）
-2. mid-checkpoint  ← 每 20 訊息
-3. session-end     ← best-effort
-4. session-start   ← 載入（不存檔）
+1. pre-compact.sh      ← 最可靠（context 壓縮前）
+2. mid-checkpoint.sh   ← 每 20 訊息
+3. session-end.sh      ← best-effort
+4. session-start.sh    ← 載入（不存檔）
+
+複雜邏輯（JSON 解析、記憶壓縮）：呼叫 memory-helper.py
 ```
 
 Hooks 設定於 project level（`workspace/.claude/settings.json`），由 `setup-claude.sh` 負責寫入，**不由 install.sh 處理**。
@@ -927,41 +961,80 @@ expert.json（以 wifi-build-expert 為例）：
   │── 繼續任務 ───────────────────────────────────────────────►  │
 ```
 
-### 10.3 session-start.js：交接上下文注入
+### 10.3 session-start.sh：交接上下文注入
 
-`session-start.js` 是 Expert 啟動的第一件事，負責將交接資訊注入新的 Expert session：
+`session-start.sh` 是 Expert 啟動的第一件事，負責將交接資訊注入新的 Expert session。
+採用 **Shell 優先**策略：基本邏輯用 Shell，複雜的 JSON 解析或記憶壓縮呼叫 `memory-helper.py`。
 
-```javascript
-// 偽代碼（實際以 Claude Code hooks 規範實作）
-async function onSessionStart(context) {
-  const memoryDir = `${CONSYS_EXPERTS_WORKSPACE_ROOT_PATH}/.claude/memory`;
+```bash
+#!/usr/bin/env bash
+# session-start.sh
+# Claude Code hook：session 開始時載入交接文件與共用記憶
 
-  // 1. 偵測是否有待接的 hand-off
-  const handoffs = await readHandoffs(`${memoryDir}/handoffs/`);
-  const latestHandoff = getLatestUnread(handoffs);
+MEMORY_DIR="${CONSYS_EXPERTS_WORKSPACE_ROOT_PATH}/.claude/memory"
+HANDOFFS_DIR="${MEMORY_DIR}/handoffs"
+SHARED_DIR="${MEMORY_DIR}/shared"
 
-  // 2. 讀取共用記憶
-  const sharedContext = await readFile(`${memoryDir}/shared/project.md`);
-  const conventions   = await readFile(`${memoryDir}/shared/conventions.md`);
+# 1. 偵測是否有待接的 hand-off（取最新一筆）
+latest_handoff=$(ls -t "${HANDOFFS_DIR}"/*/handoff.md 2>/dev/null | head -1)
 
-  // 3. 將以上內容注入到 Expert 的 initial context
-  if (latestHandoff) {
-    context.inject(`
-## 來自上一個 Expert 的交接
-${latestHandoff.content}
+# 2. 輸出交接文件內容（Claude Code hook 透過 stdout 注入 context）
+if [[ -f "${latest_handoff}" ]]; then
+  echo "## 來自上一個 Expert 的交接"
+  cat "${latest_handoff}"
+  echo ""
+fi
 
-## 共用知識
-${sharedContext}
-    `);
-    latestHandoff.markAsRead();
-  }
-}
+# 3. 載入共用記憶
+if [[ -f "${SHARED_DIR}/project.md" ]]; then
+  echo "## 專案共用知識"
+  cat "${SHARED_DIR}/project.md"
+  echo ""
+fi
+
+if [[ -f "${SHARED_DIR}/conventions.md" ]]; then
+  echo "## 跨 Expert 約定"
+  cat "${SHARED_DIR}/conventions.md"
+  echo ""
+fi
+
+# 4. 複雜邏輯交給 Python helper（例如：解析 handoff YAML frontmatter、更新已讀標記）
+HELPER="${CONSYS_EXPERTS_PATH}/framework/experts/framework-common-expert/hooks/memory-helper.py"
+if [[ -f "${HELPER}" ]]; then
+  python3 "${HELPER}" mark-handoff-read "${latest_handoff}" 2>/dev/null || true
+fi
+```
+
+```python
+# memory-helper.py（由 Shell hooks 呼叫，處理複雜邏輯）
+# 使用場景：YAML frontmatter 解析、token 計算、記憶壓縮、API 呼叫等
+
+import sys
+import yaml
+from pathlib import Path
+
+def mark_handoff_read(handoff_path: str):
+    """在 handoff frontmatter 中標記 read_at timestamp"""
+    if not handoff_path:
+        return
+    path = Path(handoff_path)
+    if not path.exists():
+        return
+    # 解析並更新 YAML frontmatter（Shell 難以處理的結構化操作）
+    content = path.read_text()
+    # ... 實際實作
+
+if __name__ == "__main__":
+    cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+    if cmd == "mark-handoff-read":
+        mark_handoff_read(sys.argv[2] if len(sys.argv) > 2 else "")
 ```
 
 **為什麼這個設計是必要的**（對應 v1 設計 gap 分析）：
 - v1 設計有 `run-agent.sh`，啟動時注入 handoff context
-- v2.4 補回此功能，改以 Claude Code hook 實作（`session-start.js`）
+- v2 補回此功能，改以 Claude Code hook 實作（`session-start.sh`）
 - 本地 `handoffs/` 存在，新 Expert 不需要去 consys-memory 拉取，降低啟動延遲
+- Shell/Python 雙層設計：Shell 負責流程控制，Python 負責結構化資料操作
 
 ### 10.4 hand-off 文件寫入時機與存放位置
 
@@ -1023,7 +1096,7 @@ employee_id: john.doe
 | 機制 | Phase 1：Claude Code | Phase 2：OpenClaw | Phase 3：ADK/SDK |
 |------|---------------------|------------------|-----------------|
 | 安裝 | `install.sh` symlink | `install.sh --target openclaw` | `AgentDefinition` 自動 |
-| Hooks | JS，project level | TypeScript `handler.ts` | `PostToolUse callback` |
+| Hooks | **Shell（優先）+ Python（複雜邏輯）** | TypeScript `handler.ts`（此階段重寫）| `PostToolUse callback` |
 | Skills | SKILL.md | SKILL.md + `metadata.openclaw` | `system_prompt` 注入 |
 | Commands | COMMAND.md | user-invocable Skill | SDK tool 定義 |
 | Memory | Markdown + Git | MEMORY.md + LanceDB | JSON output |
@@ -1102,7 +1175,7 @@ framework/experts/
     │   └── framework-supply-chain-knowhow/    ← 供應鏈攻擊知識
     │       └── SKILL.md
     ├── hooks/
-    │   └── pre-install-check.js               ← 安裝前自動掃描
+    │   └── pre-install-check.sh               ← 安裝前自動掃描
     ├── commands/
     │   └── framework-security-audit-tool/     ← /security-audit 指令
     │       └── COMMAND.md
@@ -1115,7 +1188,7 @@ framework/experts/
 | 功能 | 說明 |
 |------|------|
 | 靜態分析 | 掃描 SKILL.md / COMMAND.md 是否有 prompt injection、資料外洩指令 |
-| Hook 掃描 | 檢查 `.js` hooks 是否有可疑的網路呼叫、檔案讀寫 |
+| Hook 掃描 | 檢查 `.sh` / `.py` hooks 是否有可疑的網路呼叫、檔案讀寫 |
 | External 審計 | 安裝 external-experts 前，比對已知惡意 skill fingerprint |
 | Pre-install hook | 在 install.sh 執行前觸發安全檢查，阻止高風險安裝 |
 | 報告產生 | 自動更新 `report/execution-report.md`，記錄安全掃描結果 |

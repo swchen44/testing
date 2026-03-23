@@ -1,6 +1,6 @@
 # Consys Experts — 需求書
 
-**文件版本**：v2.5
+**文件版本**：v2.6
 **狀態**：Draft
 **目標讀者**：架構師、開發者、產品負責人
 **改版說明**：
@@ -10,6 +10,7 @@
 - v2.3：新增 Future Work（Security / Memory+Learn）、參考資料
 - v2.4：加入三階段演進願景、Expert 交接流程需求、本地三區記憶設計需求
 - v2.5：Expert 和 Skill 資料夾統一加入 `test/`、`report/`、`README.md`；`unittest/` 更名為 `test/`
+- v2.6：Hook 實作語言改為 Shell 優先，複雜邏輯用 Python，JS 為最後考慮
 
 > **注意**：文件中所列的 expert、skill 名稱均為**示例**，用於說明命名規則與架構設計。實際規劃以團隊討論為準。
 
@@ -272,11 +273,11 @@ consys-experts/ (git)
 │   │       └── SKILL.md
 │   ├── hooks/                       ← Workflow：自動觸發的工作流程
 │   │   │                              實作方式 TBD（JS/TS/Python/shell）
-│   │   ├── session-start.js         ← 載入上次摘要 + 偵測 hand-off
-│   │   ├── session-end.js           ← 儲存記憶 + push consys-memory
-│   │   ├── pre-compact.js           ← context 壓縮前存快照
-│   │   ├── mid-session-checkpoint.js← 每 20 訊息自動存檔
-│   │   └── shared-utils.js
+│   │   ├── session-start.sh         ← 載入上次摘要 + 偵測 hand-off
+│   │   ├── session-end.sh           ← 儲存記憶 + push consys-memory
+│   │   ├── pre-compact.sh           ← context 壓縮前存快照
+│   │   ├── mid-session-checkpoint.sh← 每 20 訊息自動存檔
+│   │   └── shared-utils.sh
 │   └── commands/                    ← Tool：同仁可手動執行的指令
 │       ├── experts.md               ← /experts：列出所有 Expert + 切換方式
 │       └── handoff.md               ← /handoff：手動觸發 hand-off
@@ -348,11 +349,11 @@ workspace/                                       ← $CONSYS_EXPERTS_WORKSPACE_R
     │   ├── handoff-protocol → $CONSYS_EXPERTS_PATH/common/skills/handoff-protocol/
     │   └── build-systems    → $CONSYS_EXPERTS_PATH/experts/build-expert/skills/build-systems/
     ├── hooks/                                   ← Workflow symlinks
-    │   ├── session-start.js          → $CONSYS_EXPERTS_PATH/common/hooks/session-start.js
-    │   ├── session-end.js            → $CONSYS_EXPERTS_PATH/common/hooks/session-end.js
-    │   ├── pre-compact.js            → $CONSYS_EXPERTS_PATH/common/hooks/pre-compact.js
-    │   ├── mid-session-checkpoint.js → $CONSYS_EXPERTS_PATH/common/hooks/mid-session-checkpoint.js
-    │   └── shared-utils.js           → $CONSYS_EXPERTS_PATH/common/hooks/shared-utils.js
+    │   ├── session-start.sh          → $CONSYS_EXPERTS_PATH/common/hooks/session-start.sh
+    │   ├── session-end.sh            → $CONSYS_EXPERTS_PATH/common/hooks/session-end.sh
+    │   ├── pre-compact.sh            → $CONSYS_EXPERTS_PATH/common/hooks/pre-compact.sh
+    │   ├── mid-session-checkpoint.sh → $CONSYS_EXPERTS_PATH/common/hooks/mid-session-checkpoint.sh
+    │   └── shared-utils.sh           → $CONSYS_EXPERTS_PATH/common/hooks/shared-utils.sh
     └── commands/                                ← Tool symlinks
         ├── experts.md  → $CONSYS_EXPERTS_PATH/common/commands/experts.md
         └── handoff.md  → $CONSYS_EXPERTS_PATH/common/commands/handoff.md
@@ -457,11 +458,11 @@ workspace/                                       ← $CONSYS_EXPERTS_WORKSPACE_R
     │   ├── handoff-protocol → $CONSYS_EXPERTS_PATH/common/skills/handoff-protocol/
     │   └── build-systems    → $CONSYS_EXPERTS_PATH/experts/build-expert/skills/build-systems/
     ├── hooks/
-    │   ├── session-start.js          → $CONSYS_EXPERTS_PATH/common/hooks/session-start.js
-    │   ├── session-end.js            → $CONSYS_EXPERTS_PATH/common/hooks/session-end.js
-    │   ├── pre-compact.js            → $CONSYS_EXPERTS_PATH/common/hooks/pre-compact.js
-    │   ├── mid-session-checkpoint.js → $CONSYS_EXPERTS_PATH/common/hooks/mid-session-checkpoint.js
-    │   └── shared-utils.js           → $CONSYS_EXPERTS_PATH/common/hooks/shared-utils.js
+    │   ├── session-start.sh          → $CONSYS_EXPERTS_PATH/common/hooks/session-start.sh
+    │   ├── session-end.sh            → $CONSYS_EXPERTS_PATH/common/hooks/session-end.sh
+    │   ├── pre-compact.sh            → $CONSYS_EXPERTS_PATH/common/hooks/pre-compact.sh
+    │   ├── mid-session-checkpoint.sh → $CONSYS_EXPERTS_PATH/common/hooks/mid-session-checkpoint.sh
+    │   └── shared-utils.sh           → $CONSYS_EXPERTS_PATH/common/hooks/shared-utils.sh
     └── commands/
         ├── experts.md  → $CONSYS_EXPERTS_PATH/common/commands/experts.md
         └── handoff.md  → $CONSYS_EXPERTS_PATH/common/commands/handoff.md
@@ -507,7 +508,7 @@ workspace/                                       ← $CONSYS_EXPERTS_WORKSPACE_R
 | FR-02-9 | 以 `source` 方式執行，環境變數可帶回 parent shell | Must | `./install.sh` 無法把環境變數帶回 parent shell |
 | FR-02-10 | 首次執行時自動 clone `consys-memory` repo | Must | 後臺資料收集的基礎設施 |
 | FR-02-11 | 切換 Expert 時印出變更清單（新增/移除/保留的 skills） | Must | 讓同仁知道能力邊界已改變 |
-| FR-02-12 | 實作方式保留彈性（shell / npx / Python / TypeScript） | Must | 不同環境的可用工具不同，避免強依賴 |
+| FR-02-12 | Hook 實作語言優先順序：**Shell（預設）→ Python（複雜邏輯）→ JS（最後考慮）** | Must | Shell 在所有開發環境普遍存在，無需額外 runtime；Python 是韌體團隊的第二語言；JS 保留作為 OpenClaw 遷移的備用路徑 |
 
 ### FR-03：環境變數
 
@@ -616,12 +617,12 @@ git -C "$CONSYS_EXPERTS_MEMORY_PATH" push origin main
 
 | 類別 | 需求 | 理由 |
 |------|------|------|
-| **可遷移性** | Skill 格式相容 OpenClaw；Hook 以 JS 實作，未來改為 TypeScript 成本低 | 不綁定特定平台是核心設計目標 |
+| **可遷移性** | Skill 格式相容 OpenClaw；Hook 以 Shell/Python 實作（平台無關），未來遷移 OpenClaw 時改為 TypeScript | 不綁定特定平台是核心設計目標 |
 | **可擴充性** | 新增 Expert 只需新增資料夾 + expert.json + install.sh，不修改其他 Expert | 降低同仁貢獻新 Expert 的門檻 |
 | **可稽核性** | Hand-off 與 session 記憶均透過 Git 保存，支援 diff 與歷史查詢 | 後臺分析與問題溯源的基礎 |
 | **Context 效率** | Hand-off 摘要 < 2000 tokens | 避免新 Expert 開始時就面臨 context 爆炸 |
 | **相容性** | 完全運行於 Claude Code CLI，不依賴外部服務或資料庫 | 降低部署複雜度 |
-| **透明性** | 所有 hooks 以可讀的 JS/TS/shell 實作，同仁可自行檢視與修改 | 參考 Harness Engineering 的精神：no black boxes |
+| **透明性** | 所有 hooks 以可讀的 Shell/Python 實作，同仁可自行檢視與修改；韌體工程師無需學習 JS 即可維護 | 參考 Harness Engineering 的精神：no black boxes |
 
 ---
 
@@ -651,12 +652,13 @@ Phase 1：Claude Code（現在）
   install.sh symlink → .claude/skills（Knowledge）, hooks（Workflow）, commands（Tool）
   CLAUDE.md 生成機制
   consys-memory Git 後臺收集
+  Hooks 以 Shell 實作（複雜邏輯用 Python）
   Human in the Loop：人工切換 Expert
 
 Phase 2：OpenClaw
   install.sh --target openclaw
   SKILL.md 直接相容
-  bash hooks → TypeScript handler.ts
+  Shell/Python hooks → TypeScript handler.ts（此階段重寫 hooks）
   consys-memory → workspace/MEMORY.md + LanceDB
   Human in the Loop：Hook 觸發確認機制
 
@@ -715,7 +717,7 @@ AI Agent 生態系統的安全威脅已有實際案例：
 | FW-01-1 | 建立 `framework-security-expert`，提供自動化安全審計能力 | Future |
 | FW-01-2 | 提供 pre-install hook，在安裝 external-experts 前自動掃描 | Future |
 | FW-01-3 | 靜態分析 SKILL.md / COMMAND.md，偵測 prompt injection 與資料外洩指令 | Future |
-| FW-01-4 | 掃描 hooks（.js）是否有可疑網路呼叫或非預期檔案讀寫 | Future |
+| FW-01-4 | 掃描 hooks（.sh / .py）是否有可疑網路呼叫或非預期檔案讀寫 | Future |
 | FW-01-5 | 產生安全掃描報告，更新至 `report/execution-report.md` | Future |
 
 **參考實作**：[AgentShield](https://github.com/affaan-m/agentshield)
