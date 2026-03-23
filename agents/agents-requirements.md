@@ -186,7 +186,7 @@
    ~/workspace/.repo
    ~/workspace/bora/wifi, bt, mcu, build, coexistence (各為獨立 git repo)
 2. 在 ~/workspace/ clone consys-experts
-3. 執行 source experts/build-expert/install.sh
+3. 執行 source consys-experts/wifi/experts/wifi-build-expert/install.sh
 4. install.sh 自動偵測到 .repo 存在，判斷為 legacy 場景
 5. 建立 .claude/ symlinks，生成 CLAUDE.md
 6. 開啟 Claude Code，既有 code 與新安裝的 Expert 技能整合運作
@@ -205,15 +205,16 @@
 
 **流程**：
 ```
-1. 執行 source experts/cicd-expert/install.sh --switch
+1. 執行 source consys-experts/wifi/experts/wifi-cicd-expert/install.sh --switch
 2. 系統先觸發 hand-off，儲存當前 session 狀態
 3. 移除舊 Expert 的所有 symlinks（common + private 全部替換）
 4. 建立新 Expert 的 symlinks
 5. 重新生成 CLAUDE.md 與 expert.md
 6. 印出變更清單：
-   ✓ 新增: pipeline-operations, ci-patterns
-   ✗ 移除: build-systems
-   ○ 保留: expert-discovery, handoff-protocol（common，不變）
+   ✓ 新增: wifi-cicd-flow, wifi-autotest-tool, system-preflight-tool
+   ✗ 移除: wifi-build-flow, wifi-builderror-knowhow, wifi-linkerscript-knowhow
+   ○ 保留: framework-expert-discovery-knowhow, framework-handoff-flow（framework-common）
+   ○ 保留: wifi-protocol-knowhow, system-gerrit-tool（domain common）
 7. 同仁確認後，開啟 Claude Code 進入新 Expert 環境
 ```
 
@@ -259,53 +260,60 @@
 
 ### 3.1 `consys-experts` Repo 結構
 
+採用**五層資料夾設計**（Layer 1–5），詳細結構見設計書 §2–3。以下為簡化概覽：
+
 ```
 consys-experts/ (git)
 ├── README.md
 ├── registry.json                    ← 所有 Expert 目錄（expert-discovery 用）
 ├── install.sh                       ← 頂層：設定環境變數、clone consys-memory
 │
-├── common/                          ← 所有 Expert 共用
-│   ├── skills/                      ← Knowledge：共用知識庫
-│   │   ├── expert-discovery/
-│   │   │   └── SKILL.md             ← 有哪些專家？各自能做什麼？
-│   │   └── handoff-protocol/
-│   │       └── SKILL.md
-│   ├── hooks/                       ← Workflow：自動觸發的工作流程
-│   │   │                              實作方式 TBD（JS/TS/Python/shell）
-│   │   ├── session-start.sh         ← 載入上次摘要 + 偵測 hand-off
-│   │   ├── session-end.sh           ← 儲存記憶 + push consys-memory
-│   │   ├── pre-compact.sh           ← context 壓縮前存快照
-│   │   ├── mid-session-checkpoint.sh← 每 20 訊息自動存檔
-│   │   └── shared-utils.sh
-│   └── commands/                    ← Tool：同仁可手動執行的指令
-│       ├── experts.md               ← /experts：列出所有 Expert + 切換方式
-│       └── handoff.md               ← /handoff：手動觸發 hand-off
+├── framework/                       ← Layer 1：framework domain
+│   ├── experts/
+│   │   ├── framework-common-expert/ ← 跨所有 domain 共用（install.sh 無作用）
+│   │   │   ├── skills/              ← framework-expert-discovery-knowhow, framework-handoff-flow, framework-memory-tool
+│   │   │   ├── hooks/               ← session-start.sh, session-end.sh, pre-compact.sh（Shell 優先）
+│   │   │   │   └── memory-helper.py ← 複雜記憶操作（Python helper）
+│   │   │   └── commands/            ← framework-experts-tool/, framework-handoff-tool/
+│   │   ├── framework-skill-create-expert/
+│   │   └── framework-learn-expert/
+│   └── external-experts/            ← skill-creator/, claude-memory-engine/（git submodule）
 │
-├── experts/
-│   ├── build-expert/                ← 懂編譯的專家
-│   │   ├── expert.json
-│   │   ├── CLAUDE.md
-│   │   ├── install.sh
-│   │   └── skills/                  ← 私有 Knowledge
-│   │       └── build-systems/SKILL.md
-│   ├── cicd-expert/                 ← 懂 CI/CD 的專家
-│   │   ├── expert.json
-│   │   ├── CLAUDE.md
-│   │   ├── install.sh
-│   │   └── skills/
-│   │       └── pipeline-operations/SKILL.md
-│   └── device-expert/               ← 懂裝置控制的專家
-│       ├── expert.json
-│       ├── CLAUDE.md
-│       ├── install.sh
-│       └── skills/
-│           └── device-control/SKILL.md
+├── wifi/                            ← Layer 1：wifi domain【示例】
+│   ├── experts/
+│   │   ├── wifi-common-expert/      ← wifi domain 共用（install.sh 無作用）
+│   │   ├── wifi-build-expert/
+│   │   ├── wifi-debug-expert/
+│   │   └── wifi-cicd-expert/
+│   └── external-experts/
 │
-└── external/                        ← 社群優質工具（工具名稱為資料夾名）
-    ├── skill-creator/               ← 快速建立/優化 Skill
-    ├── claude-memory-engine/        ← 8-step 學習循環記憶引擎（參考實作）
-    └── {other-tool}/
+├── bt/                              ← Layer 1：bt domain【示例】
+│   ├── experts/
+│   │   ├── bt-common-expert/
+│   │   ├── bt-build-expert/
+│   │   └── bt-debug-expert/
+│   └── external-experts/
+│
+└── system/                          ← Layer 1：system domain（含跨 domain 共用工具）【示例】
+    ├── experts/
+    │   ├── system-common-expert/    ← system-gerrit-tool, system-repo-multi-repo-tool 等
+    │   ├── system-cicd-expert/
+    │   └── system-device-expert/
+    └── external-experts/
+```
+
+**每個 Expert 資料夾標準結構**（Layer 4）：
+```
+{domain}-{name}-expert/
+├── README.md      ← History、使用說明、人工安裝說明、Design、目的
+├── install.sh     ← 安裝腳本
+├── expert.json    ← Expert 設定（dependencies、transitions、human_in_the_loop）
+├── CLAUDE.md      ← system prompt 模板
+├── skills/        ← 每個 skill 含 SKILL.md / README.md / test/ / report/
+├── hooks/         ← 額外 hook（可選，Shell 優先）
+├── commands/      ← 額外 command（可選）
+├── test/          ← Expert 層級測試腳本
+└── report/        ← 執行過程、結果、token 用量
 ```
 
 ---
@@ -324,7 +332,7 @@ workspace/
 └── consys-experts/ (git)
 ```
 
-**Step 2 — `source consys-experts/experts/build-expert/install.sh`**
+**Step 2 — `source consys-experts/wifi/experts/wifi-build-expert/install.sh`**
 ```
 workspace/                                       ← $CONSYS_EXPERTS_WORKSPACE_ROOT_PATH
 ├── consys-experts/ (git)
@@ -343,20 +351,26 @@ workspace/                                       ← $CONSYS_EXPERTS_WORKSPACE_R
 └── .claude/
     ├── expert.md                                ← 由 expert.json 生成
     ├── expert.local.md                          ← 個人客製化（選填，.gitignore）
-    ├── .active-expert                           ← "build-expert"
+    ├── .active-expert                           ← "wifi-build-expert"
     ├── skills/                                  ← Knowledge symlinks
-    │   ├── expert-discovery → $CONSYS_EXPERTS_PATH/common/skills/expert-discovery/
-    │   ├── handoff-protocol → $CONSYS_EXPERTS_PATH/common/skills/handoff-protocol/
-    │   └── build-systems    → $CONSYS_EXPERTS_PATH/experts/build-expert/skills/build-systems/
-    ├── hooks/                                   ← Workflow symlinks
-    │   ├── session-start.sh          → $CONSYS_EXPERTS_PATH/common/hooks/session-start.sh
-    │   ├── session-end.sh            → $CONSYS_EXPERTS_PATH/common/hooks/session-end.sh
-    │   ├── pre-compact.sh            → $CONSYS_EXPERTS_PATH/common/hooks/pre-compact.sh
-    │   ├── mid-session-checkpoint.sh → $CONSYS_EXPERTS_PATH/common/hooks/mid-session-checkpoint.sh
-    │   └── shared-utils.sh           → $CONSYS_EXPERTS_PATH/common/hooks/shared-utils.sh
-    └── commands/                                ← Tool symlinks
-        ├── experts.md  → $CONSYS_EXPERTS_PATH/common/commands/experts.md
-        └── handoff.md  → $CONSYS_EXPERTS_PATH/common/commands/handoff.md
+    │   ├── framework-expert-discovery-knowhow → $CONSYS_EXPERTS_PATH/framework/experts/framework-common-expert/skills/framework-expert-discovery-knowhow/
+    │   ├── framework-handoff-flow             → .../framework-common-expert/skills/framework-handoff-flow/
+    │   ├── wifi-protocol-knowhow              → $CONSYS_EXPERTS_PATH/wifi/experts/wifi-common-expert/skills/wifi-protocol-knowhow/
+    │   ├── system-gerrit-tool                 → $CONSYS_EXPERTS_PATH/system/experts/system-common-expert/skills/system-gerrit-tool/
+    │   └── wifi-build-flow                    → $CONSYS_EXPERTS_PATH/wifi/experts/wifi-build-expert/skills/wifi-build-flow/
+    ├── hooks/                                   ← Workflow symlinks（來自 framework-common-expert）
+    │   ├── session-start.sh          → $CONSYS_EXPERTS_PATH/framework/experts/framework-common-expert/hooks/session-start.sh
+    │   ├── session-end.sh            → .../framework-common-expert/hooks/session-end.sh
+    │   ├── pre-compact.sh            → .../framework-common-expert/hooks/pre-compact.sh
+    │   ├── mid-session-checkpoint.sh → .../framework-common-expert/hooks/mid-session-checkpoint.sh
+    │   └── shared-utils.sh           → .../framework-common-expert/hooks/shared-utils.sh
+    ├── commands/                                ← Tool symlinks
+    │   ├── framework-experts-tool  → .../framework-common-expert/commands/framework-experts-tool/
+    │   └── framework-handoff-tool  → .../framework-common-expert/commands/framework-handoff-tool/
+    └── memory/                                  ← 本地三區記憶（首次安裝時建立）
+        ├── shared/
+        ├── working/wifi-build-expert/
+        └── handoffs/
 ```
 
 **Step 3 — 開啟 Claude Code，Expert 協助下載 fw**
@@ -434,7 +448,7 @@ workspace/
 └── consys-experts/ (git)
 ```
 
-**Step 2 — `source consys-experts/experts/build-expert/install.sh`**
+**Step 2 — `source consys-experts/wifi/experts/wifi-build-expert/install.sh`**
 （install.sh 偵測到根目錄有 `.repo`，自動判斷 legacy 場景）
 ```
 workspace/                                       ← $CONSYS_EXPERTS_WORKSPACE_ROOT_PATH
@@ -452,20 +466,26 @@ workspace/                                       ← $CONSYS_EXPERTS_WORKSPACE_R
 └── .claude/
     ├── expert.md
     ├── expert.local.md                          ← 選填
-    ├── .active-expert                           ← "build-expert"
+    ├── .active-expert                           ← "wifi-build-expert"
     ├── skills/
-    │   ├── expert-discovery → $CONSYS_EXPERTS_PATH/common/skills/expert-discovery/
-    │   ├── handoff-protocol → $CONSYS_EXPERTS_PATH/common/skills/handoff-protocol/
-    │   └── build-systems    → $CONSYS_EXPERTS_PATH/experts/build-expert/skills/build-systems/
+    │   ├── framework-expert-discovery-knowhow → $CONSYS_EXPERTS_PATH/framework/experts/framework-common-expert/skills/framework-expert-discovery-knowhow/
+    │   ├── framework-handoff-flow             → .../framework-common-expert/skills/framework-handoff-flow/
+    │   ├── wifi-protocol-knowhow              → $CONSYS_EXPERTS_PATH/wifi/experts/wifi-common-expert/skills/wifi-protocol-knowhow/
+    │   ├── system-gerrit-tool                 → $CONSYS_EXPERTS_PATH/system/experts/system-common-expert/skills/system-gerrit-tool/
+    │   └── wifi-build-flow                    → $CONSYS_EXPERTS_PATH/wifi/experts/wifi-build-expert/skills/wifi-build-flow/
     ├── hooks/
-    │   ├── session-start.sh          → $CONSYS_EXPERTS_PATH/common/hooks/session-start.sh
-    │   ├── session-end.sh            → $CONSYS_EXPERTS_PATH/common/hooks/session-end.sh
-    │   ├── pre-compact.sh            → $CONSYS_EXPERTS_PATH/common/hooks/pre-compact.sh
-    │   ├── mid-session-checkpoint.sh → $CONSYS_EXPERTS_PATH/common/hooks/mid-session-checkpoint.sh
-    │   └── shared-utils.sh           → $CONSYS_EXPERTS_PATH/common/hooks/shared-utils.sh
-    └── commands/
-        ├── experts.md  → $CONSYS_EXPERTS_PATH/common/commands/experts.md
-        └── handoff.md  → $CONSYS_EXPERTS_PATH/common/commands/handoff.md
+    │   ├── session-start.sh          → $CONSYS_EXPERTS_PATH/framework/experts/framework-common-expert/hooks/session-start.sh
+    │   ├── session-end.sh            → .../framework-common-expert/hooks/session-end.sh
+    │   ├── pre-compact.sh            → .../framework-common-expert/hooks/pre-compact.sh
+    │   ├── mid-session-checkpoint.sh → .../framework-common-expert/hooks/mid-session-checkpoint.sh
+    │   └── shared-utils.sh           → .../framework-common-expert/hooks/shared-utils.sh
+    ├── commands/
+    │   ├── framework-experts-tool  → .../framework-common-expert/commands/framework-experts-tool/
+    │   └── framework-handoff-tool  → .../framework-common-expert/commands/framework-handoff-tool/
+    └── memory/
+        ├── shared/
+        ├── working/wifi-build-expert/
+        └── handoffs/
 ```
 
 **兩個場景的主要差異**：
@@ -489,7 +509,7 @@ workspace/                                       ← $CONSYS_EXPERTS_WORKSPACE_R
 | FR-01-1 | repo 命名為 `consys-experts`，Expert 資料夾命名為 `experts/` | Must | 避免與 AI 的「agent」概念混淆，名稱更 general |
 | FR-01-2 | 每個 Expert 資料夾含 `expert.json`、`CLAUDE.md`、`install.sh`、`skills/`、`test/`、`report/`、`README.md` | Must | 標準化結構，讓 install.sh 可一致處理；test/ 和 report/ 支援品質追蹤 |
 | FR-01-3 | `expert.json` 含名稱、描述、觸發詞、skills、transitions、dependencies | Must | 資訊越完整，expert-discovery 越有用 |
-| FR-01-4 | `common/` 分為 skills（Knowledge）、hooks（Workflow）、commands（Tool）三層 | Must | 對應 Expert 定義的三個組件 |
+| FR-01-4 | `framework-common-expert` 存放跨所有 domain 共用的 skills / hooks / commands；各 domain 的 `{domain}-common-expert` 存放該 domain 共用內容 | Must | 三層依賴（framework → domain → private）對應 Expert 定義的三個組件 |
 | FR-01-5 | `external/` 存放社群工具，以工具名稱為資料夾名（git submodule） | Should | 整合優質社群工具，避免重造輪子 |
 | FR-01-6 | `registry.json` 列出所有 Expert 及其 metadata | Must | expert-discovery 的資料來源 |
 

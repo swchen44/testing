@@ -547,9 +547,15 @@ consys-experts/ (git)
       "skills": [
         "wifi-protocol-knowhow",
         "wifi-arch-knowhow",
-        "wifi-coderule-knowhow",
-        "wifi-gerrit-tool",
-        "wifi-repo-tool"
+        "wifi-coderule-knowhow"
+      ],
+      "hooks": [],
+      "commands": []
+    },
+    "system-common-expert": {
+      "skills": [
+        "system-gerrit-tool",
+        "system-repo-multi-repo-tool"
       ],
       "hooks": [],
       "commands": []
@@ -619,7 +625,9 @@ install.sh 讀取 `expert.json` 的 `dependencies` + `private`，依序在 works
 │   ├── framework-memory-tool               → $CONSYS_EXPERTS_PATH/framework/experts/framework-common-expert/skills/framework-memory-tool/
 │   ├── wifi-protocol-knowhow               → $CONSYS_EXPERTS_PATH/wifi/experts/wifi-common-expert/skills/wifi-protocol-knowhow/
 │   ├── wifi-arch-knowhow                   → $CONSYS_EXPERTS_PATH/wifi/experts/wifi-common-expert/skills/wifi-arch-knowhow/
-│   ├── wifi-gerrit-tool                    → $CONSYS_EXPERTS_PATH/wifi/experts/wifi-common-expert/skills/wifi-gerrit-tool/
+│   ├── wifi-coderule-knowhow               → $CONSYS_EXPERTS_PATH/wifi/experts/wifi-common-expert/skills/wifi-coderule-knowhow/
+│   ├── system-gerrit-tool                  → $CONSYS_EXPERTS_PATH/system/experts/system-common-expert/skills/system-gerrit-tool/
+│   ├── system-repo-multi-repo-tool         → $CONSYS_EXPERTS_PATH/system/experts/system-common-expert/skills/system-repo-multi-repo-tool/
 │   ├── wifi-build-flow                     → $CONSYS_EXPERTS_PATH/wifi/experts/wifi-build-expert/skills/wifi-build-flow/
 │   └── wifi-builderror-knowhow             → $CONSYS_EXPERTS_PATH/wifi/experts/wifi-build-expert/skills/wifi-builderror-knowhow/
 │
@@ -657,10 +665,11 @@ $ source wifi/experts/wifi-cicd-expert/install.sh --switch
 💾 儲存 wifi-build-expert 工作記憶...
 
 Skills 變更：
-  ✓ 新增: wifi-cicd-flow, wifi-preflight-tool, wifi-autotest-tool
+  ✓ 新增: wifi-cicd-flow, wifi-autotest-tool, system-preflight-tool
   ✗ 移除: wifi-build-flow, wifi-builderror-knowhow, wifi-linkerscript-knowhow, wifi-rompatch-knowhow
   ○ 保留: framework-expert-discovery-knowhow, framework-handoff-flow
-  ○ 保留: wifi-protocol-knowhow, wifi-arch-knowhow, wifi-gerrit-tool, wifi-repo-tool
+  ○ 保留: wifi-protocol-knowhow, wifi-arch-knowhow, wifi-coderule-knowhow
+  ○ 保留: system-gerrit-tool, system-repo-multi-repo-tool
 
 Hooks 變更：
   ○ 保留（framework-common）: session-start, session-end, pre-compact, mid-session-checkpoint
