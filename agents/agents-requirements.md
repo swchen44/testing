@@ -1,6 +1,6 @@
 # Consys Experts — 需求書
 
-**文件版本**：v2.4
+**文件版本**：v2.5
 **狀態**：Draft
 **目標讀者**：架構師、開發者、產品負責人
 **改版說明**：
@@ -9,6 +9,7 @@
 - v2.2：expert.json 加入 owner、環境變數統一 CONSYS_EXPERTS_ 前綴、Agent First 流程補充 clone 步驟、skill 名稱更新
 - v2.3：新增 Future Work（Security / Memory+Learn）、參考資料
 - v2.4：加入三階段演進願景、Expert 交接流程需求、本地三區記憶設計需求
+- v2.5：Expert 和 Skill 資料夾統一加入 `test/`、`report/`、`README.md`；`unittest/` 更名為 `test/`
 
 > **注意**：文件中所列的 expert、skill 名稱均為**示例**，用於說明命名規則與架構設計。實際規劃以團隊討論為準。
 
@@ -485,7 +486,7 @@ workspace/                                       ← $CONSYS_EXPERTS_WORKSPACE_R
 | 編號 | 需求 | 優先級 | 理由 |
 |------|------|--------|------|
 | FR-01-1 | repo 命名為 `consys-experts`，Expert 資料夾命名為 `experts/` | Must | 避免與 AI 的「agent」概念混淆，名稱更 general |
-| FR-01-2 | 每個 Expert 資料夾含 `expert.json`、`CLAUDE.md`、`install.sh`、`skills/` | Must | 標準化結構，讓 install.sh 可一致處理 |
+| FR-01-2 | 每個 Expert 資料夾含 `expert.json`、`CLAUDE.md`、`install.sh`、`skills/`、`test/`、`report/`、`README.md` | Must | 標準化結構，讓 install.sh 可一致處理；test/ 和 report/ 支援品質追蹤 |
 | FR-01-3 | `expert.json` 含名稱、描述、觸發詞、skills、transitions、dependencies | Must | 資訊越完整，expert-discovery 越有用 |
 | FR-01-4 | `common/` 分為 skills（Knowledge）、hooks（Workflow）、commands（Tool）三層 | Must | 對應 Expert 定義的三個組件 |
 | FR-01-5 | `external/` 存放社群工具，以工具名稱為資料夾名（git submodule） | Should | 整合優質社群工具，避免重造輪子 |
@@ -539,6 +540,10 @@ git -C "$CONSYS_EXPERTS_MEMORY_PATH" push origin main
 | FR-04-3 | `handoff-protocol` skill 定義交接格式與流程 | Must | 所有 Expert 都需要知道如何交接 |
 | FR-04-4 | Expert 可有私有 skills，切換時一併替換 | Must | 不同專家有不同的知識庫 |
 | FR-04-5 | External skills 透過 registry 聲明，install.sh 自動建立 link | Should | 整合社群工具 |
+| FR-04-6 | 每個 Skill 資料夾除 `SKILL.md` 外，還需含 `README.md`、`test/`、`report/` | Must | 統一 Skill 資料夾標準，支援測試驗證與執行記錄 |
+| FR-04-7 | Skill `README.md` 記錄：History、使用說明、人工安裝說明、Design、目的 | Must | 讓維護者了解 skill 的脈絡與演進 |
+| FR-04-8 | Skill `test/` 存放測試腳本或測試用 JSON，可由 CI 自動執行 | Should | 驗證 Skill 是否達到預期效果 |
+| FR-04-9 | Skill `report/` 記錄執行過程、結果、token 用量 | Should | 追蹤 Skill 品質與 AI 成本 |
 
 ### FR-05：CLAUDE.md 生成機制
 

@@ -1,8 +1,8 @@
 # Consys Experts — 設計書
 
-**文件版本**：v2.5
+**文件版本**：v2.6
 **狀態**：Draft
-**依據**：agents-requirements.md v2.4
+**依據**：agents-requirements.md v2.5
 
 > **注意**：本文件中所列的 expert、skill 名稱均為**示例**，用於說明命名規則與架構設計。實際 expert 與 skill 的規劃以團隊討論為準。
 
@@ -60,7 +60,7 @@ consys-experts/
 │   │       ├── commands/
 │   │       │   └── {domain}-{name}-tool/
 │   │       │       └── COMMAND.md
-│   │       ├── unittest/
+│   │       ├── test/
 │   │       ├── report/
 │   │       │   ├── execution-report.md    ← 人工維護
 │   │       │   └── unittest-report.md     ← 人工維護
@@ -136,14 +136,17 @@ consys-experts/
 
 ```
 {expert}/
-├── README.md              ← 說明此 expert 的用途、能力、使用方式
+├── README.md              ← History、使用說明、人工安裝說明、Design、目的
 ├── install.sh             ← 安裝腳本（依 expert.json 建立 symlinks）
 ├── expert.json            ← Expert 設定（含 dependencies 宣告）
 ├── CLAUDE.md              ← 此 Expert 的 system prompt 模板
 │
-├── skills/                ← Knowledge：多個 skill 資料夾
+├── skills/                ← Knowledge：多個 skill 資料夾（每個 skill 見 Layer 5）
 │   └── {domain}-{name}-{type}/
-│       └── SKILL.md
+│       ├── SKILL.md
+│       ├── README.md      ← History、使用說明、人工安裝說明、Design、目的
+│       ├── test/          ← Skill 測試腳本或測試用 JSON
+│       └── report/        ← 執行過程、結果、token 用量
 │
 ├── hooks/                 ← Workflow：針對此 expert 的額外 hook（可選）
 │   └── {hook-name}.js     ← Claude Code 實作（project level）
@@ -152,24 +155,22 @@ consys-experts/
 │   └── {domain}-{name}-tool/
 │       └── COMMAND.md
 │
-├── unittest/              ← 預留：skill / hook 的測試腳本
+├── test/                  ← Expert 層級測試腳本（端到端，驗證整個 Expert）
 │
-└── report/                ← 預留：人工維護的報告
-    ├── execution-report.md
-    └── unittest-report.md
+└── report/                ← 執行過程、結果、token 用量（人工維護）
 ```
 
 **`{domain}-common-expert` 的資料夾結構**（同上，但 install.sh 無作用）：
 
 ```
 {domain}-common-expert/
-├── README.md
+├── README.md              ← History、使用說明、Design、目的
 ├── install.sh             ← 無作用（common 不直接安裝）
 ├── expert.json            ← 僅描述，無 dependencies
-├── skills/                ← 此 domain 共用的 skills
+├── skills/                ← 此 domain 共用的 skills（每個 skill 見 Layer 5）
 ├── hooks/                 ← 此 domain 共用的 hooks（可選）
 ├── commands/              ← 此 domain 共用的 commands（可選）
-├── unittest/
+├── test/
 └── report/
 ```
 
@@ -232,6 +233,28 @@ system-device-tool                   ← 裝置控制（tmux/ssh/uart/adb）
 system-cicd-tool
 ```
 
+### 2.7 Layer 5：Skill 內部資料夾
+
+每個 Skill 資料夾（`{domain}-{name}-{type}/`）的標準結構：
+
+```
+{domain}-{name}-{type}/          Layer 5：skill 資料夾
+├── SKILL.md                     ← Skill 主體（YAML frontmatter + 內容）
+├── README.md                    ← History、使用說明、人工安裝說明、Design、目的
+├── test/                        ← Skill 測試腳本或測試用 JSON
+│   ├── test-basic.sh            ← 基本功能驗證
+│   └── test-data.json           ← 測試輸入資料（可選）
+└── report/                      ← 執行過程、結果、token 用量
+    └── eval-report.md           ← 人工或自動生成的評估報告
+```
+
+| 檔案/資料夾 | 用途 | 維護方式 |
+|-----------|------|---------|
+| `SKILL.md` | Skill 主體，Claude 在執行時讀取 | 人工撰寫，`framework-learn-expert` 未來可自動更新 |
+| `README.md` | History、使用說明、人工安裝說明、Design、目的 | 人工維護 |
+| `test/` | 驗證 Skill 是否達到預期效果的腳本或 JSON | 人工撰寫，CI 可自動執行 |
+| `report/` | 每次執行的過程記錄、結果摘要、token 用量統計 | 人工或 hook 自動寫入 |
+
 **Command 命名規則**（同 Skill，type 固定為 `tool`）：
 ```
 {domain}-{name}-tool/
@@ -259,9 +282,12 @@ consys-experts/ (git)
 │   │   │   ├── install.sh                   ← 無作用
 │   │   │   ├── expert.json
 │   │   │   ├── skills/
-│   │   │   │   ├── framework-expert-discovery-knowhow/
-│   │   │   │   │   └── SKILL.md
-│   │   │   │   ├── framework-handoff-flow/
+│   │   │   │   ├── framework-expert-discovery-knowhow/  ← Layer 5 完整示例
+│   │   │   │   │   ├── SKILL.md             ← Skill 主體
+│   │   │   │   │   ├── README.md            ← History、使用說明、Design、目的
+│   │   │   │   │   ├── test/               ← Skill 測試腳本或測試用 JSON
+│   │   │   │   │   └── report/             ← 執行過程、結果、token 用量
+│   │   │   │   ├── framework-handoff-flow/ ← 以下 skill 均同 Layer 5 結構（SKILL.md / README.md / test/ / report/）
 │   │   │   │   │   └── SKILL.md
 │   │   │   │   └── framework-memory-tool/
 │   │   │   │       └── SKILL.md
@@ -276,10 +302,8 @@ consys-experts/ (git)
 │   │   │   │   │   └── COMMAND.md
 │   │   │   │   └── framework-handoff-tool/
 │   │   │   │       └── COMMAND.md
-│   │   │   ├── unittest/
-│   │   │   └── report/
-│   │   │       ├── execution-report.md
-│   │   │       └── unittest-report.md
+│   │   │   ├── test/                        ← Expert 層級測試腳本
+│   │   │   └── report/                      ← 執行過程、結果、token 用量
 │   │   │
 │   │   ├── framework-skill-create-expert/
 │   │   │   ├── README.md
@@ -293,7 +317,7 @@ consys-experts/ (git)
 │   │   │   │       └── SKILL.md
 │   │   │   ├── hooks/
 │   │   │   ├── commands/
-│   │   │   ├── unittest/
+│   │   │   ├── test/
 │   │   │   └── report/
 │   │   │
 │   │   └── framework-learn-expert/
@@ -308,7 +332,7 @@ consys-experts/ (git)
 │   │       │       └── SKILL.md
 │   │       ├── hooks/
 │   │       ├── commands/
-│   │       ├── unittest/
+│   │       ├── test/
 │   │       └── report/
 │   │
 │   └── external-experts/
@@ -331,7 +355,7 @@ consys-experts/ (git)
 │   │   │   │   # 注：gerrit/repo/preflight 工具移至 system domain
 │   │   │   ├── hooks/                       ← wifi 專屬 hooks（可選）
 │   │   │   ├── commands/
-│   │   │   ├── unittest/
+│   │   │   ├── test/
 │   │   │   └── report/
 │   │   │
 │   │   ├── wifi-build-expert/               ← 【示例】
@@ -352,7 +376,7 @@ consys-experts/ (git)
 │   │   │   │       └── SKILL.md
 │   │   │   ├── hooks/
 │   │   │   ├── commands/
-│   │   │   ├── unittest/
+│   │   │   ├── test/
 │   │   │   └── report/
 │   │   │
 │   │   ├── wifi-debug-expert/
@@ -375,7 +399,7 @@ consys-experts/ (git)
 │   │   │   │       └── SKILL.md
 │   │   │   ├── hooks/
 │   │   │   ├── commands/
-│   │   │   ├── unittest/
+│   │   │   ├── test/
 │   │   │   └── report/
 │   │   │
 │   │   └── wifi-cicd-expert/                ← 【示例】
@@ -391,7 +415,7 @@ consys-experts/ (git)
 │   │       │   # 注：preflight 工具移至 system domain
 │   │       ├── hooks/
 │   │       ├── commands/
-│   │       ├── unittest/
+│   │       ├── test/
 │   │       └── report/
 │   │
 │   └── external-experts/                    ← wifi 特定的外部工具
@@ -413,7 +437,7 @@ consys-experts/ (git)
 │   │   │   │   # 注：gerrit 工具改由 system-gerrit-tool 提供
 │   │   │   ├── hooks/
 │   │   │   ├── commands/
-│   │   │   ├── unittest/
+│   │   │   ├── test/
 │   │   │   └── report/
 │   │   ├── bt-build-expert/                 ← 【示例】
 │   │   │   ├── skills/
@@ -421,9 +445,9 @@ consys-experts/ (git)
 │   │   │   │   │   └── SKILL.md
 │   │   │   │   └── bt-fw-build-flow/        ← bt fw 完整 build 流程
 │   │   │   │       └── SKILL.md
-│   │   │   ├── hooks/ ├── commands/ ├── unittest/ └── report/
+│   │   │   ├── hooks/ ├── commands/ ├── test/ └── report/
 │   │   └── bt-debug-expert/                 ← 【示例】
-│   │       ├── skills/ ├── hooks/ ├── commands/ ├── unittest/ └── report/
+│   │       ├── skills/ ├── hooks/ ├── commands/ ├── test/ └── report/
 │   └── external-experts/
 │
 └── system/
@@ -443,11 +467,11 @@ consys-experts/ (git)
     │   │   │   │   └── SKILL.md
     │   │   │   └── system-device-tool/      ← tmux/ssh/uart/adb 裝置控制
     │   │   │       └── SKILL.md
-    │   │   ├── hooks/ ├── commands/ ├── unittest/ └── report/
+    │   │   ├── hooks/ ├── commands/ ├── test/ └── report/
     │   ├── system-cicd-expert/              ← 【示例】
-    │   │   ├── skills/ ├── hooks/ ├── commands/ ├── unittest/ └── report/
+    │   │   ├── skills/ ├── hooks/ ├── commands/ ├── test/ └── report/
     │   └── system-device-expert/            ← 【示例】
-    │       ├── skills/ ├── hooks/ ├── commands/ ├── unittest/ └── report/
+    │       ├── skills/ ├── hooks/ ├── commands/ ├── test/ └── report/
     └── external-experts/
 ```
 
@@ -1082,7 +1106,7 @@ framework/experts/
     ├── commands/
     │   └── framework-security-audit-tool/     ← /security-audit 指令
     │       └── COMMAND.md
-    ├── unittest/
+    ├── test/
     └── report/
 ```
 
