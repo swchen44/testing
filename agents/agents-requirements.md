@@ -1,6 +1,6 @@
 # Consys Experts — 需求書
 
-**文件版本**：v2.7
+**文件版本**：v2.8
 **狀態**：Draft
 **目標讀者**：架構師、開發者、產品負責人
 **改版說明**：
@@ -12,6 +12,7 @@
 - v2.5：Expert 和 Skill 資料夾統一加入 `test/`、`report/`、`README.md`；`unittest/` 更名為 `test/`
 - v2.6：Hook 實作語言改為 Shell 優先，複雜邏輯用 Python，JS 為最後考慮
 - v2.7：專案更名 consys → connsys（雙 n），更新所有 repo/env var 名稱
+- v2.8：Skill/Hook scripts Shell 優先、Python 採 PEP 723 inline metadata、pytest test_xxx.py
 
 > **注意**：文件中所列的 expert、skill 名稱均為**示例**，用於說明命名規則與架構設計。實際規劃以團隊討論為準。
 
@@ -563,9 +564,12 @@ git -C "$CONNSYS_EXPERTS_MEMORY_PATH" push origin main
 | FR-04-4 | Expert 可有私有 skills，切換時一併替換 | Must | 不同專家有不同的知識庫 |
 | FR-04-5 | External skills 透過 registry 聲明，install.sh 自動建立 link | Should | 整合社群工具 |
 | FR-04-6 | 每個 Skill 資料夾除 `SKILL.md` 外，還需含 `README.md`、`test/`、`report/` | Must | 統一 Skill 資料夾標準，支援測試驗證與執行記錄 |
-| FR-04-7 | Skill `README.md` 記錄：History、使用說明、人工安裝說明、Design、目的 | Must | 讓維護者了解 skill 的脈絡與演進 |
-| FR-04-8 | Skill `test/` 存放測試腳本或測試用 JSON，可由 CI 自動執行 | Should | 驗證 Skill 是否達到預期效果 |
+| FR-04-7 | Skill `README.md` 記錄：History、使用說明、人工安裝說明、Design、目的；開發說明亦可寫於此 | Must | 讓維護者了解 skill 的脈絡與演進，開發者不需另開文件 |
+| FR-04-8 | Skill `test/` 以 **Shell 腳本（`test-basic.sh`）為主**；需 Python 時使用 pytest，測試檔命名 `test_xxx.py` | Must | Shell 腳本覆蓋基本驗證；pytest 負責結構化 unit test，CI 可自動執行 |
 | FR-04-9 | Skill `report/` 記錄執行過程、結果、token 用量 | Should | 追蹤 Skill 品質與 AI 成本 |
+| FR-04-10 | Skill 內的 script 語言優先順序：**Shell（預設）→ Python（複雜邏輯）**，與 hook 策略一致 | Must | 一致的語言策略降低維護認知負擔 |
+| FR-04-11 | Skill / Hook 內的所有 **Python 腳本須採用 PEP 723 Inline Script Metadata**，在腳本頂端宣告 `requires-python` 與 `dependencies` | Must | 免除 `requirements.txt` 與 venv 管理；每個腳本自帶依賴宣告，可直接用 `uv run` 執行；參考：[PEP 723](https://peps.python.org/pep-0723/) |
+| FR-04-12 | pytest `test_xxx.py` 放置於 skill 的 `test/` 資料夾，測試資料用 `test-data.json` 或 `conftest.py` 管理 | Should | 標準化測試目錄，CI 可直接 `pytest test/` 執行 |
 
 ### FR-05：CLAUDE.md 生成機制
 

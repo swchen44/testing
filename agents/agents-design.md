@@ -1,8 +1,8 @@
 # Consys Experts — 設計書
 
-**文件版本**：v2.8
+**文件版本**：v2.9
 **狀態**：Draft
-**依據**：agents-requirements.md v2.7
+**依據**：agents-requirements.md v2.8
 
 > **注意**：本文件中所列的 expert、skill 名稱均為**示例**，用於說明命名規則與架構設計。實際 expert 與 skill 的規劃以團隊討論為準。
 
@@ -28,21 +28,21 @@
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 1.2 Hook 實作語言優先策略
+### 1.2 Script 實作語言優先策略（Hooks + Skill Scripts）
 
-Hooks 是 Consys Expert Harness 的行為骨幹，其實作語言直接影響團隊的維護成本。採用以下優先順序：
+適用範圍：所有 Hook（`hooks/`）與 Skill 內的可執行腳本（`test/`、helper scripts）。
 
 ```
 優先順序：Shell（預設）→ Python（複雜邏輯）→ JS（OpenClaw 遷移備用）
 
 判斷原則：
   ① 能用 Shell 解決的，就用 Shell
-     - 適合：git 操作、檔案讀寫、環境變數、簡單字串處理
+     - 適合：git 操作、檔案讀寫、環境變數、簡單字串處理、基本功能驗證
      - 優點：所有開發環境普遍存在，無需額外 runtime，韌體工程師熟悉
 
   ② Shell 難以維護時，改用 Python
-     - 適合：JSON/YAML 解析、複雜字串處理、API 呼叫、跨平台邏輯
-     - 優點：韌體團隊的第二語言，函式庫豐富（GitPython、requests）
+     - 適合：JSON/YAML 解析、複雜字串處理、API 呼叫、跨平台邏輯、unit test
+     - 優點：韌體團隊的第二語言，函式庫豐富（GitPython、requests、pyyaml）
      - 慣例：Shell hook 以 subprocess 呼叫 Python helper（同名 .py 檔）
 
   ③ JS 為最後考慮，保留作為 OpenClaw 遷移路徑
@@ -50,13 +50,38 @@ Hooks 是 Consys Expert Harness 的行為骨幹，其實作語言直接影響團
      - 原則：Phase 1 不主動新增 JS hooks
 ```
 
+**Python 腳本強制規範：PEP 723 Inline Script Metadata**
+
+所有 Python 腳本（hooks helper、skill scripts、test files）**必須**在檔案頂端宣告 inline metadata：
+
+```python
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "pyyaml>=6.0",
+#   "requests>=2.31",
+# ]
+# ///
+```
+
+| 好處 | 說明 |
+|------|------|
+| **零 venv 管理** | 不需 `requirements.txt`、不需建 venv，依賴宣告在腳本本身 |
+| **直接執行** | `uv run script.py` 自動安裝依賴並執行 |
+| **自帶文件** | 查看腳本即知依賴版本，降低環境不一致問題 |
+| **CI 友善** | CI 環境只需安裝 `uv`，不需管理每個 skill 的 venv |
+
+參考：[PEP 723 — Inline script metadata](https://peps.python.org/pep-0723/)
+
 **檔案命名慣例**：
 
 | 情況 | 命名 | 範例 |
 |------|------|------|
-| 純 Shell | `{name}.sh` | `session-start.sh` |
+| 純 Shell hook | `{name}.sh` | `session-start.sh` |
 | Shell + Python helper | `{name}.sh` + `{name}-helper.py` | `session-end.sh` + `session-end-helper.py` |
 | 複雜邏輯獨立為 Python | `{name}.py`（由 Shell wrapper 呼叫）| `compress-memory.py` |
+| Skill 基本測試 | `test-basic.sh` | Shell 驗證 skill 主要功能 |
+| Skill pytest | `test_{name}.py` | Python unit test，放 `test/` 下 |
 
 ### 1.3 Consys Expert 組成
 
@@ -272,19 +297,23 @@ system-cicd-tool
 ```
 {domain}-{name}-{type}/          Layer 5：skill 資料夾
 ├── SKILL.md                     ← Skill 主體（YAML frontmatter + 內容）
-├── README.md                    ← History、使用說明、人工安裝說明、Design、目的
-├── test/                        ← Skill 測試腳本或測試用 JSON
-│   ├── test-basic.sh            ← 基本功能驗證
+├── README.md                    ← History、使用說明、人工安裝說明、Design、目的、開發說明
+├── test/                        ← Skill 測試腳本（Shell 優先）
+│   ├── test-basic.sh            ← Shell：基本功能驗證（必要）
+│   ├── test_{skill_name}.py     ← Python pytest：unit test（有複雜邏輯時加）
+│   ├── conftest.py              ← pytest fixtures（可選）
 │   └── test-data.json           ← 測試輸入資料（可選）
 └── report/                      ← 執行過程、結果、token 用量
-    └── eval-report.md           ← 人工或自動生成的評估報告
+    ├── execution-report.md      ← 人工維護
+    └── test-report.md           ← 人工或 CI 自動生成
 ```
 
 | 檔案/資料夾 | 用途 | 維護方式 |
 |-----------|------|---------|
 | `SKILL.md` | Skill 主體，Claude 在執行時讀取 | 人工撰寫，`framework-learn-expert` 未來可自動更新 |
-| `README.md` | History、使用說明、人工安裝說明、Design、目的 | 人工維護 |
-| `test/` | 驗證 Skill 是否達到預期效果的腳本或 JSON | 人工撰寫，CI 可自動執行 |
+| `README.md` | History、使用說明、人工安裝說明、Design、目的；**開發說明也寫在這裡** | 人工維護 |
+| `test/test-basic.sh` | Shell 驗證 skill 主要功能，所有 skill 必備 | 人工撰寫，CI 可自動執行 |
+| `test/test_xxx.py` | pytest unit test，適用有 Python helper 的 skill | 人工撰寫，`pytest test/` 自動執行 |
 | `report/` | 每次執行的過程記錄、結果摘要、token 用量統計 | 人工或 hook 自動寫入 |
 
 **Command 命名規則**（同 Skill，type 固定為 `tool`）：
@@ -738,7 +767,124 @@ repo sync -j8
 
 ---
 
-## 8. CLAUDE.md 生成機制
+## 8. Python Script 規範（PEP 723）
+
+所有 Hook helper 與 Skill 內的 Python 腳本，**強制採用 PEP 723 Inline Script Metadata**。
+
+### 8.1 標準模板
+
+```python
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "pyyaml>=6.0",
+#   "requests>=2.31",
+# ]
+# ///
+
+import sys
+# 依賴在頂端 metadata 宣告後正常 import
+
+def main() -> None:
+    pass
+
+if __name__ == "__main__":
+    main()
+```
+
+### 8.2 執行方式
+
+| 方式 | 指令 | 說明 |
+|------|------|------|
+| **推薦：uv run** | `uv run script.py` | 自動讀取 inline metadata，安裝依賴後執行 |
+| 已有環境 | `python3 script.py` | 依賴已安裝時可直接執行 |
+| pytest | `pytest test/` | 執行 `test/` 下所有 `test_*.py` |
+
+> 安裝 `uv`：`curl -LsSf https://astral.sh/uv/install.sh | sh`
+
+### 8.3 Skill pytest 範例（test_xxx.py）
+
+```python
+# test/test_wifi_build_flow.py
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "pytest>=8.0",
+# ]
+# ///
+"""wifi-build-flow skill 的 unit test"""
+
+import json
+from pathlib import Path
+import pytest
+
+
+@pytest.fixture
+def test_data():
+    data_file = Path(__file__).parent / "test-data.json"
+    return json.loads(data_file.read_text())
+
+
+def test_build_command_format(test_data):
+    """驗證 build 指令格式正確"""
+    cmd = test_data["build_cmd"]
+    assert "make" in cmd
+    assert "-j" in cmd
+
+
+def test_output_dir_path():
+    """驗證 build 輸出目錄路徑格式"""
+    path = f"$CONNSYS_EXPERTS_CODE_SPACE_PATH/fw/bora/build/out"
+    assert "build/out" in path
+```
+
+### 8.4 Hook Python Helper 範例（含 PEP 723）
+
+更新後的 `memory-helper.py`（由 `session-end.sh` 呼叫）：
+
+```python
+# memory-helper.py
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "pyyaml>=6.0",
+# ]
+# ///
+"""connsys-memory 複雜操作 helper
+由 Shell hooks 呼叫，處理 YAML frontmatter 解析、token 計算等 Shell 難以完成的邏輯。
+"""
+
+import sys
+import yaml
+from pathlib import Path
+from datetime import datetime, timezone
+
+
+def mark_handoff_read(handoff_path: str) -> None:
+    """在 handoff frontmatter 中標記 read_at timestamp"""
+    if not handoff_path:
+        return
+    path = Path(handoff_path)
+    if not path.exists():
+        return
+    content = path.read_text()
+    if content.startswith("---"):
+        end = content.find("---", 3)
+        fm = yaml.safe_load(content[3:end])
+        fm["read_at"] = datetime.now(timezone.utc).isoformat()
+        new_fm = yaml.dump(fm, allow_unicode=True)
+        path.write_text(f"---\n{new_fm}---{content[end+3:]}")
+
+
+if __name__ == "__main__":
+    cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+    if cmd == "mark-handoff-read":
+        mark_handoff_read(sys.argv[2] if len(sys.argv) > 2 else "")
+```
+
+---
+
+## 9. CLAUDE.md 生成機制
 
 install.sh 在 `$CONNSYS_EXPERTS_WORKSPACE_ROOT_PATH` 生成 `CLAUDE.md`：
 
@@ -776,9 +922,9 @@ build, compile, 編譯, BUILD_FAILED
 
 ---
 
-## 9. 記憶系統設計
+## 10. 記憶系統設計
 
-### 9.1 四個 Hook 存檔點（Shell 優先實作，project level）
+### 10.1 四個 Hook 存檔點（Shell 優先實作，project level）
 
 ```
 存檔可靠性：
@@ -792,7 +938,7 @@ build, compile, 編譯, BUILD_FAILED
 
 Hooks 設定於 project level（`workspace/.claude/settings.json`），由 `setup-claude.sh` 負責寫入，**不由 install.sh 處理**。
 
-### 9.2 connsys-memory Repo 結構（後臺遠端）
+### 10.2 connsys-memory Repo 結構（後臺遠端）
 
 ```
 connsys-memory/ (git)
@@ -807,7 +953,7 @@ connsys-memory/ (git)
     └── jane.smith/
 ```
 
-### 9.3 本地三區記憶（Local Three-Zone Memory）
+### 10.3 本地三區記憶（Local Three-Zone Memory）
 
 本地記憶存放於 `workspace/.claude/memory/`，分三個用途明確的區域：
 
@@ -837,7 +983,7 @@ workspace/.claude/memory/
 | `working/{expert}/` | 隨 Expert 生命週期，切換時清除（或歸檔） | 僅當前 Expert 寫入，其他可讀 | session-end、pre-compact |
 | `handoffs/{run-id}/` | 永久存在，寫入後唯讀 | 由 hand-off hook 建立，後繼 Expert 讀取 | session-end、--switch |
 
-### 9.4 本地記憶 vs connsys-memory 的分工
+### 10.4 本地記憶 vs connsys-memory 的分工
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -867,7 +1013,7 @@ workspace/.claude/memory/
 - Zone 2（working）設計為「揮發性」：Expert 切換時可以清除，避免記憶污染
 - Zone 3（handoffs）設計為「手術室交班記錄」：寫入後不修改，後繼 Expert 信任其內容
 
-### 9.5 週期性記憶收集設計（Lightweight Periodic Collection）
+### 10.5 週期性記憶收集設計（Lightweight Periodic Collection）
 
 目標：讓記憶能累積供未來 `framework-learn-expert` 分析，同時**不造成即時使用的負擔**。
 
@@ -887,9 +1033,9 @@ workspace/.claude/memory/
 
 ---
 
-## 10. Expert 狀態機與交接流程設計
+## 11. Expert 狀態機與交接流程設計
 
-### 10.1 Expert 工作流程狀態機
+### 11.1 Expert 工作流程狀態機
 
 每個 Expert 在 `expert.json` 的 `transitions` 中宣告狀態轉移規則。當 Expert 完成工作後，根據結果事件觸發不同的下一步：
 
@@ -927,7 +1073,7 @@ expert.json（以 wifi-build-expert 為例）：
 - 事件名稱在 `expert.json` 的 `transitions` 中定義（大寫慣例，如 BUILD_SUCCESS）
 - Stage 1 由人工確認後執行 `--switch`；Stage 2 未來可自動觸發
 
-### 10.2 Expert-to-Expert 交接序列圖
+### 11.2 Expert-to-Expert 交接序列圖
 
 ```
 同仁              wifi-build-expert        install.sh         wifi-cicd-expert
@@ -971,7 +1117,7 @@ expert.json（以 wifi-build-expert 為例）：
   │── 繼續任務 ───────────────────────────────────────────────►  │
 ```
 
-### 10.3 session-start.sh：交接上下文注入
+### 11.3 session-start.sh：交接上下文注入
 
 `session-start.sh` 是 Expert 啟動的第一件事，負責將交接資訊注入新的 Expert session。
 採用 **Shell 優先**策略：基本邏輯用 Shell，複雜的 JSON 解析或記憶壓縮呼叫 `memory-helper.py`。
@@ -1015,30 +1161,7 @@ if [[ -f "${HELPER}" ]]; then
 fi
 ```
 
-```python
-# memory-helper.py（由 Shell hooks 呼叫，處理複雜邏輯）
-# 使用場景：YAML frontmatter 解析、token 計算、記憶壓縮、API 呼叫等
-
-import sys
-import yaml
-from pathlib import Path
-
-def mark_handoff_read(handoff_path: str):
-    """在 handoff frontmatter 中標記 read_at timestamp"""
-    if not handoff_path:
-        return
-    path = Path(handoff_path)
-    if not path.exists():
-        return
-    # 解析並更新 YAML frontmatter（Shell 難以處理的結構化操作）
-    content = path.read_text()
-    # ... 實際實作
-
-if __name__ == "__main__":
-    cmd = sys.argv[1] if len(sys.argv) > 1 else ""
-    if cmd == "mark-handoff-read":
-        mark_handoff_read(sys.argv[2] if len(sys.argv) > 2 else "")
-```
+> `memory-helper.py` 完整實作（含 PEP 723 inline metadata）見 **§8.4**。
 
 **為什麼這個設計是必要的**（對應 v1 設計 gap 分析）：
 - v1 設計有 `run-agent.sh`，啟動時注入 handoff context
@@ -1046,7 +1169,7 @@ if __name__ == "__main__":
 - 本地 `handoffs/` 存在，新 Expert 不需要去 connsys-memory 拉取，降低啟動延遲
 - Shell/Python 雙層設計：Shell 負責流程控制，Python 負責結構化資料操作
 
-### 10.4 hand-off 文件寫入時機與存放位置
+### 11.4 hand-off 文件寫入時機與存放位置
 
 | 觸發事件 | 本地寫入 | 遠端同步 |
 |---------|---------|---------|
@@ -1057,7 +1180,7 @@ if __name__ == "__main__":
 
 ---
 
-## 11. Hand-off 文件格式
+## 12. Hand-off 文件格式
 
 ```markdown
 ---
@@ -1086,7 +1209,7 @@ employee_id: john.doe
 
 ---
 
-## 12. 安全與權限設計
+## 13. 安全與權限設計
 
 | 考量 | 設計 |
 |------|------|
@@ -1099,9 +1222,9 @@ employee_id: john.doe
 
 ---
 
-## 13. 遷移路線
+## 14. 遷移路線
 
-### 13.1 三階段遷移
+### 14.1 三階段遷移
 
 | 機制 | Phase 1：Claude Code | Phase 2：OpenClaw | Phase 3：ADK/SDK |
 |------|---------------------|------------------|-----------------|
@@ -1112,7 +1235,7 @@ employee_id: john.doe
 | Memory | Markdown + Git | MEMORY.md + LanceDB | JSON output |
 | Human in Loop | 手動確認 | Hook 觸發確認 | 風險評分自動決定 |
 
-### 13.2 SKILL.md 遷移格式
+### 14.2 SKILL.md 遷移格式
 
 加入 `metadata.openclaw` 區塊即可，內容不需修改：
 
@@ -1130,7 +1253,7 @@ metadata:
 
 ---
 
-## 14. 名詞定義
+## 15. 名詞定義
 
 | 術語 | 定義 |
 |------|------|
@@ -1153,9 +1276,9 @@ metadata:
 
 ---
 
-## 15. Future Work
+## 16. Future Work
 
-### 15.1 Security：Expert 安全審計機制
+### 16.1 Security：Expert 安全審計機制
 
 **動機**：
 
@@ -1207,7 +1330,7 @@ framework/experts/
 
 ---
 
-### 15.2 Memory + Learn：自我檢討的 Expert
+### 16.2 Memory + Learn：自我檢討的 Expert
 
 **動機**：
 
@@ -1253,7 +1376,7 @@ framework/experts/framework-learn-expert/skills/
 
 ---
 
-## 16. 參考資料
+## 17. 參考資料
 
 ### 核心概念
 
