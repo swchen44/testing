@@ -245,6 +245,75 @@
 
 ---
 
+### US-06：多 Expert 並存場景（--add 追加）
+
+**背景**：同仁已安裝 wifi-bora-base-expert，在同一個 workspace 想額外追加 wifi-bora-coverity-expert 來處理 Coverity 掃描任務，不想重裝整個環境。
+
+**流程**：
+```
+1. 目前狀態：
+   .claude/ 已有 wifi-bora-base-expert 的 symlinks
+   CLAUDE.md 已包含 wifi-bora-base-expert 的 @include 內容
+2. 執行 --add 追加：
+   uv run ./connsys-experts/install.py --add wifi-bora/experts/wifi-bora-coverity-expert/expert.json && source .connsys-expert/.env
+3. install.py 讀取 wifi-bora-coverity-expert 的 dependencies + internal：
+   - 補建 wifi-bora-coverity-expert 自己的 internal skills 的 symlink
+     (wifi-bora-coverity-flow, wifi-bora-coverity-cr-tool, wifi-bora-risk-report-flow)
+   - 跳過已存在的 symlinks（wifi-bora-base-expert 已建好的不重複建立）
+4. 重新生成 CLAUDE.md，內容同時包含兩個 Expert：
+   @include wifi-bora-base-expert/expert.md
+   @include wifi-bora-coverity-expert/expert.md
+   @include soul.md / rules.md / duties.md
+5. 印出變更清單：
+   ✓ 新增: wifi-bora-coverity-flow, wifi-bora-coverity-cr-tool, wifi-bora-risk-report-flow
+   ○ 已存在 (跳過): wifi-bora-protocol-knowhow, wifi-bora-build-flow, ... (base 的 skills)
+6. 重新開啟 Claude Code，同時具備兩個 Expert 的能力
+```
+
+**驗收條件**：
+- `--add` 不移除現有 symlinks，只補建新 expert 的 internal skills
+- 已存在的 symlink 跳過（idempotent，不報錯）
+- CLAUDE.md 重新生成，所有已安裝 Expert 均出現在 @include 清單中
+- `.connsys-expert/installed.json`（安裝狀態記錄）更新，新增 wifi-bora-coverity-expert 條目
+
+---
+
+### US-07：移除單一 Expert（--remove + --add 重建）
+
+**背景**：同仁目前同時安裝了 wifi-bora-base-expert 和 wifi-bora-coverity-expert，想移除 coverity-expert，但保留 base-expert。由於 CLAUDE.md 是由 install.py 根據已安裝 Expert 清單動態生成，移除後必須觸發重建。
+
+**流程**：
+```
+1. 目前狀態：
+   .claude/ 同時有兩個 Expert 的 symlinks
+   CLAUDE.md 包含兩個 Expert 的 @include
+2. 執行 --remove 移除：
+   uv run ./connsys-experts/install.py --remove wifi-bora/experts/wifi-bora-coverity-expert/expert.json
+3. install.py 執行移除邏輯：
+   - 找出 wifi-bora-coverity-expert 的 internal skills（coverity-flow, coverity-cr-tool, risk-report-flow）
+   - 若這些 skill 的 symlink 沒有被其他已安裝 Expert 引用 → 刪除
+   - 若有共用（如 wifi-bora-risk-report-flow 被另一 expert 也引用）→ 保留
+   - 更新 .connsys-expert/installed.json，移除 coverity-expert 條目
+4. 因 CLAUDE.md 無法部分刪減（它是整體生成的），需要重建：
+   install.py 自動根據 installed.json 的剩餘清單重新執行 --add 邏輯
+   → 等同於 --add wifi-bora-base-expert（只保留 base）
+5. 重新生成 CLAUDE.md，只剩 wifi-bora-base-expert 的 @include
+6. 印出變更清單：
+   ✗ 移除: wifi-bora-coverity-flow, wifi-bora-coverity-cr-tool
+   ○ 保留（其他 expert 仍使用）: wifi-bora-risk-report-flow（若有共用）
+   ○ 保留: wifi-bora-base-expert 的所有 skills（不受影響）
+```
+
+**驗收條件**：
+- `--remove` 只刪除「無其他 expert 依賴」的 symlinks，共用 skills 保留
+- CLAUDE.md 自動重建，移除後只包含剩餘 Expert 的 @include
+- `.connsys-expert/installed.json` 正確更新
+- 若移除後 installed.json 為空，CLAUDE.md 退回最小化內容（僅 framework hooks）
+
+**為什麼需要 --remove + 重建而非單純刪 symlink**：CLAUDE.md 是整體生成的文件，無法只刪除部分 @include 行；需透過 install.py 根據剩餘 installed.json 完整重新生成，才能確保 CLAUDE.md 與實際 symlinks 保持一致。
+
+---
+
 ### US-04：Agent 自動運作（未來目標）
 
 **背景**：Agent 自行判斷任務，自動完成簡單操作，遇到風險時觸發 Human in the Loop。
