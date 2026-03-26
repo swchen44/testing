@@ -16,6 +16,7 @@
 - v2.9：多 Expert 安裝/卸載需求、 install.py --doctor、Python 版本檢查、Skill 與 Command 邊界釐清、限制補充（Skill 版本相容性、memory GC）、Future Work 補充（registry.json、Skill README 範本）
 - v3.0：架構重大重設計——install.sh 改為單一 install.py（stdlib only）、expert 資料夾移除 CLAUDE.md 和 install.sh、新增 soul.md / rules.md / duties.md / agents/ 資料夾、記憶改用 .connsys-jarvis/memory/、環境變數輸出至 .connsys-jarvis/.env、新增 symlink 靈活性設計原則（因應 agent 生態快速演進）
 - v3.1：expert.json dependencies 改為陣列格式（支援 all/正面表列/省略=不繼承）、exclude_symlink 改為全域 regex patterns（3-step 執行順序）、更新 domain 清單（wifi-bora/sys-bora/bt-bora/lrwpan-bora/wifi-gen4m/wifi-logan）、common 改為 base、加入新 expert 清單
+- v3.2：install.py 路徑改為 `scripts/install.py`；新增 FR-02-17（pytest 單元測試 `scripts/test/test_install.py`）；更新目錄結構加入 `scripts/` 子節
 
 > **注意**：文件中所列的 expert、skill 名稱均為**示例**，用於說明命名規則與架構設計。實際規劃以團隊討論為準。
 
@@ -182,12 +183,12 @@
 1. 在 ~/workspace/ 執行：git clone {connsys-jarvis-url}
    → 出現 ~/workspace/connsys-jarvis/
 2. 瀏覽 connsys-jarvis/ 資料夾，找到所需 Expert（如 wifi-bora/experts/wifi-bora-memory-slim-expert/）
-3. 執行：uv run ./connsys-jarvis/install.py --init wifi-bora/experts/wifi-bora-memory-slim-expert/expert.json && source .connsys-jarvis/.env
+3. 執行：uv run ./connsys-jarvis/scripts/install.py --init wifi-bora/experts/wifi-bora-memory-slim-expert/expert.json && source .connsys-jarvis/.env
    → 建立 .claude/ symlinks、生成 CLAUDE.md、設定環境變數
 4. 開啟 Claude Code → 已具備 wifi-bora-memory-slim-expert 的 Skills/Hooks/Commands
 5. 與 Claude 互動，Claude 協助用 repo tool 下載 fw 到 codespace/fw/
 6. 需要切換到 wifi-bora-cr-robot-expert 時：
-   uv run ./connsys-jarvis/install.py --init wifi-bora/experts/wifi-bora-cr-robot-expert/expert.json && source .connsys-jarvis/.env
+   uv run ./connsys-jarvis/scripts/install.py --init wifi-bora/experts/wifi-bora-cr-robot-expert/expert.json && source .connsys-jarvis/.env
    確認變更清單後，重新開啟 Claude Code
 ```
 
@@ -209,7 +210,7 @@
    ~/workspace/.repo
    ~/workspace/bora/wifi, bt, mcu, build, coexistence (各為獨立 git repo)
 2. 在 ~/workspace/ clone connsys-jarvis
-3. 執行 uv run ./connsys-jarvis/install.py --init wifi-bora/experts/wifi-bora-memory-slim-expert/expert.json && source .connsys-jarvis/.env
+3. 執行 uv run ./connsys-jarvis/scripts/install.py --init wifi-bora/experts/wifi-bora-memory-slim-expert/expert.json && source .connsys-jarvis/.env
 4. install.py 自動偵測到 .repo 存在，判斷為 legacy 場景
 5. 建立 .claude/ symlinks，生成 CLAUDE.md
 6. 開啟 Claude Code，既有 code 與新安裝的 Expert 技能整合運作
@@ -228,7 +229,7 @@
 
 **流程**：
 ```
-1. 執行 uv run ./connsys-jarvis/install.py --init wifi-bora/experts/wifi-bora-cr-robot-expert/expert.json && source .connsys-jarvis/.env
+1. 執行 uv run ./connsys-jarvis/scripts/install.py --init wifi-bora/experts/wifi-bora-cr-robot-expert/expert.json && source .connsys-jarvis/.env
 2. 系統先觸發 hand-off，儲存當前 session 狀態
 3. 移除舊 Expert 的所有 symlinks（common + internal 全部替換）
 4. 建立新 Expert 的 symlinks
@@ -255,7 +256,7 @@
    .claude/ 已有 wifi-bora-base-expert 的 symlinks
    CLAUDE.md 已包含 wifi-bora-base-expert 的 @include 內容
 2. 執行 --add 追加：
-   uv run ./connsys-jarvis/install.py --add wifi-bora/experts/wifi-bora-coverity-expert/expert.json && source .connsys-jarvis/.env
+   uv run ./connsys-jarvis/scripts/install.py --add wifi-bora/experts/wifi-bora-coverity-expert/expert.json && source .connsys-jarvis/.env
 3. install.py 讀取 wifi-bora-coverity-expert 的 dependencies + internal：
    - 補建 wifi-bora-coverity-expert 自己的 internal skills 的 symlink
      (wifi-bora-coverity-flow, wifi-bora-coverity-cr-tool, wifi-bora-risk-report-flow)
@@ -291,7 +292,7 @@
    .claude/ 同時有兩個 Expert 的 symlinks
    CLAUDE.md 包含兩個 Expert 的 @include
 2. 執行 --remove 移除：
-   uv run ./connsys-jarvis/install.py --remove wifi-bora/experts/wifi-bora-coverity-expert/expert.json
+   uv run ./connsys-jarvis/scripts/install.py --remove wifi-bora/experts/wifi-bora-coverity-expert/expert.json
 3. install.py 執行移除邏輯：
    - 找出 wifi-bora-coverity-expert 的 internal skills（coverity-flow, coverity-cr-tool, risk-report-flow）
    - 若這些 skill 的 symlink 沒有被其他已安裝 Expert 引用 → 刪除
@@ -361,7 +362,10 @@
 connsys-jarvis/ (git)
 ├── README.md
 ├── registry.json                    ← 所有 Expert 目錄（expert-discovery 用）
-├── install.py                       ← 唯一安裝程式（設定環境變數、管理 symlink）
+├── scripts/                         ← 安裝程式與測試
+│   ├── install.py                   ← 唯一安裝程式（設定環境變數、管理 symlink）
+│   └── test/
+│       └── test_install.py          ← pytest 單元測試（uv run / uvx pytest）
 │
 ├── framework/                       ← Layer 1：framework domain
 │   ├── experts/
@@ -427,7 +431,7 @@ workspace/
 └── connsys-jarvis/ (git)
 ```
 
-**Step 2 — `uv run ./connsys-jarvis/install.py --init wifi-bora/experts/wifi-bora-memory-slim-expert/expert.json`**
+**Step 2 — `uv run ./connsys-jarvis/scripts/install.py --init wifi-bora/experts/wifi-bora-memory-slim-expert/expert.json`**
 ```
 workspace/                                       ← $CONNSYS_JARVIS_WORKSPACE_ROOT_PATH
 ├── connsys-jarvis/ (git)
@@ -548,7 +552,7 @@ workspace/
 └── connsys-jarvis/ (git)
 ```
 
-**Step 2 — `uv run ./connsys-jarvis/install.py --init wifi-bora/experts/wifi-bora-memory-slim-expert/expert.json`**
+**Step 2 — `uv run ./connsys-jarvis/scripts/install.py --init wifi-bora/experts/wifi-bora-memory-slim-expert/expert.json`**
 （install.py 偵測到根目錄有 `.repo`，自動判斷 legacy 場景）
 ```
 workspace/                                       ← $CONNSYS_JARVIS_WORKSPACE_ROOT_PATH
@@ -640,13 +644,13 @@ workspace/                                       ← $CONNSYS_JARVIS_WORKSPACE_R
 | `wifi-logan-base-expert` | wifi-logan | — | wifi logan driver 下載/編譯；Wi-Fi 標準基礎；driver 架構與 SDS；自動上傳 |
 | FR-01-6 | `registry.json` 列出所有 Expert 及其 metadata | Must | expert-discovery 的資料來源 |
 
-### FR-02：install.py（取代 install.sh）
+### FR-02：scripts/install.py（取代 install.sh）
 
-**核心原則**：單一 `connsys-jarvis/install.py` 負責所有安裝管理。Expert 資料夾本身不含安裝邏輯。
+**核心原則**：單一 `connsys-jarvis/scripts/install.py` 負責所有安裝管理。Expert 資料夾本身不含安裝邏輯。
 
 | 編號 | 需求 | 優先級 | 理由 |
 |------|------|--------|------|
-| FR-02-1 | `connsys-jarvis/install.py` 為**唯一安裝程式**，以 Python stdlib 實作，用 `uv run ./connsys-jarvis/install.py` 執行 | Must | 單一入口，避免每個 Expert 各自維護 install.sh；Python stdlib 無需額外依賴 |
+| FR-02-1 | `connsys-jarvis/scripts/install.py` 為**唯一安裝程式**，以 Python stdlib 實作，用 `uv run ./connsys-jarvis/scripts/install.py` 執行 | Must | 單一入口，避免每個 Expert 各自維護 install.sh；Python stdlib 無需額外依賴 |
 | FR-02-2 | 支援 `--init <expert.json>` 參數：**全新安裝**，清除所有既有 link，讀取 expert.json 及其 dependencies，重建所有 symlink，重新生成 CLAUDE.md 和 .env | Must | 初次安裝或強制重建時使用 |
 | FR-02-3 | 支援 `--add <expert.json>` 參數：**疊加安裝**，在既有 Expert 基礎上加入新的 Expert（清除後依完整 Expert 清單重建）| Must | 多 Expert 安裝流程 |
 | FR-02-4 | 支援 `--remove <expert.json>` 參數：從已安裝清單移除此 Expert，依剩餘 Expert 重建 symlink 和 CLAUDE.md | Must | 移除特定 Expert，不影響其他 Expert |
@@ -662,6 +666,7 @@ workspace/                                       ← $CONNSYS_JARVIS_WORKSPACE_R
 | FR-02-14 | install.py 安裝前自動檢查：system Python 版本、`uv` 是否安裝、`uvx` 是否可用；版本不符輸出警告（不阻斷）| Should | PEP 723 腳本需要 Python ≥ 3.11 |
 | FR-02-15 | Windows 環境下 symlink 不可用時，install.py 自動降級為 **copy 模式**（功能相同，但更新 expert 內容後需重新執行）| Should | 跨平台支援 |
 | FR-02-16 | Hook 實作語言優先順序：**Shell（預設）→ Python（複雜邏輯）→ JS（最後考慮）**；Python 腳本採 PEP 723 | Must | 一致的語言策略，Shell 無需額外 runtime |
+| FR-02-17 | `connsys-jarvis/scripts/test/test_install.py` 提供 **pytest 單元測試**，覆蓋 `install.py` 所有核心函式；執行方式：`uvx pytest scripts/test/test_install.py -v` 或 `uv run --with pytest pytest scripts/test/test_install.py` | Must | 確保安裝邏輯可回歸測試；含環境變數生成、CLAUDE.md 生成、symlink 建立等整合測試 |
 
 ### FR-03：環境變數
 
@@ -840,7 +845,7 @@ Phase 3：ADK/SDK（全自動）
 | Harness Engineering | 為 AI 打造「自動化治理體系」，透過限制行為邊界與豐富上下文，實現大規模自動化（來源：Birgitta Böckeler / Martin Fowler Blog）|
 | connsys-jarvis | 團隊共同維護的 Expert 工具 repo |
 | connsys-memory | 後臺資料收集 repo，以員工工號（git username）為子資料夾 |
-|  install.py | 安裝腳本，建立 symlinks，生成 CLAUDE.md，設定環境變數 |
+| scripts/install.py | 安裝腳本，建立 symlinks，生成 CLAUDE.md，設定環境變數 |
 | Agent First | 從空白 workspace 開始，由 Expert 引導下載 code 的場景 |
 | Legacy | 同仁已手動下載 code，後續引入 Expert 的場景 |
 | codespace | Agent First 場景下，Expert 引導下載的 source code 集中目錄 |

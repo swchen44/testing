@@ -1,8 +1,8 @@
 # Consys Experts — 設計書
 
-**文件版本**：v3.1
+**文件版本**：v3.2
 **狀態**：Draft
-**依據**：agents-requirements.md v3.1
+**依據**：agents-requirements.md v3.2
 
 > **注意**：本文件中所列的 expert、skill 名稱均為**示例**，用於說明命名規則與架構設計。實際 expert 與 skill 的規劃以團隊討論為準。
 
@@ -319,7 +319,10 @@ sys-bora-cicd-tool
 ## 3. 完整目錄結構
 
 connsys-jarvis/
-├── install.py                      ← 唯一安裝程式（Python stdlib）
+├── scripts/                        ← 安裝程式與測試
+│   ├── install.py                  ← 唯一安裝程式（Python stdlib）
+│   └── test/
+│       └── test_install.py         ← pytest 單元測試（uvx pytest）
 ├── README.md
 │
 ├── framework/                      ← 框架 domain（跨所有 domain 共用）
@@ -595,22 +598,22 @@ Step 3：套用 exclude_symlink.patterns，移除名稱符合任一 regex 的 li
 
 ---
 
-## 5. install.py 設計
+## 5. scripts/install.py 設計
 
-`install.py` 是 **connsys-jarvis 根目錄唯一的安裝程式**，以 Python stdlib 實作，用 `uv run` 執行。Expert 資料夾**不再含 install.sh**。
+`scripts/install.py` 是 **connsys-jarvis 唯一的安裝程式**，位於 `connsys-jarvis/scripts/install.py`，以 Python stdlib 實作，用 `uv run` 執行。Expert 資料夾**不再含 install.sh**。
 
 ### 5.1 執行方式與參數
 
 ```bash
 # 安裝指令（所有指令後都需 source .env）
-uv run ./connsys-jarvis/install.py --init   framework/experts/framework-base-expert/expert.json
-uv run ./connsys-jarvis/install.py --add    wifi-bora/experts/wifi-bora-memory-slim-expert/expert.json
-uv run ./connsys-jarvis/install.py --remove wifi-bora/experts/wifi-bora-memory-slim-expert/expert.json
-uv run ./connsys-jarvis/install.py --uninstall
+uv run ./connsys-jarvis/scripts/install.py --init   framework/experts/framework-base-expert/expert.json
+uv run ./connsys-jarvis/scripts/install.py --add    wifi-bora/experts/wifi-bora-memory-slim-expert/expert.json
+uv run ./connsys-jarvis/scripts/install.py --remove wifi-bora/experts/wifi-bora-memory-slim-expert/expert.json
+uv run ./connsys-jarvis/scripts/install.py --uninstall
 
 # 查詢 / 診斷
-uv run ./connsys-jarvis/install.py --list
-uv run ./connsys-jarvis/install.py --doctor
+uv run ./connsys-jarvis/scripts/install.py --list
+uv run ./connsys-jarvis/scripts/install.py --doctor
 
 # source 環境變數（每次執行 install.py 後都需要）
 source .connsys-jarvis/.env
@@ -821,21 +824,21 @@ Step 8：印出變更清單（新增/移除/保留）+ source 提示
 
 ```bash
 # 全新安裝（第一次）
-uv run ./connsys-jarvis/install.py --init framework/experts/framework-base-expert/expert.json
+uv run ./connsys-jarvis/scripts/install.py --init framework/experts/framework-base-expert/expert.json
 source .connsys-jarvis/.env
 
 # 加入 wifi-bora-memory-slim-expert（自動帶入 dependencies）
-uv run ./connsys-jarvis/install.py --add wifi-bora/experts/wifi-bora-memory-slim-expert/expert.json
+uv run ./connsys-jarvis/scripts/install.py --add wifi-bora/experts/wifi-bora-memory-slim-expert/expert.json
 source .connsys-jarvis/.env
 
 # 查看安裝結果
-uv run ./connsys-jarvis/install.py --list
+uv run ./connsys-jarvis/scripts/install.py --list
 ```
 
 ### 5.6 --doctor 診斷輸出
 
 ```
-$ uv run ./connsys-jarvis/install.py --doctor
+$ uv run ./connsys-jarvis/scripts/install.py --doctor
 
 === Connsys Jarvis Doctor ===
 
@@ -863,6 +866,47 @@ Symlinks 健康狀態：
   → 刪除 dangling link: .claude/skills/wifi-bora-lsp-tool
     python3 -c "import os; os.remove('.claude/skills/wifi-bora-lsp-tool')"
 ```
+
+### 5.7 scripts/ 目錄設計與單元測試
+
+`connsys-jarvis/scripts/` 目錄集中管理所有可執行腳本：
+
+```
+scripts/
+├── install.py          ← 主安裝程式（Python stdlib，PEP 723）
+└── test/
+    └── test_install.py ← pytest 單元測試
+```
+
+**執行測試**：
+
+```bash
+# 從 workspace 根目錄執行（connsys-jarvis 為 symlink）
+uvx pytest connsys-jarvis/scripts/test/test_install.py -v
+
+# 或從 connsys-jarvis 目錄執行
+cd connsys-jarvis && uvx pytest scripts/test/test_install.py -v
+
+# 使用 uv run（若未安裝 uvx）
+uv run --with pytest pytest scripts/test/test_install.py -v
+```
+
+**測試覆蓋範圍**（`test_install.py` 共 57 個測試）：
+
+| 測試類 | 函式 | 測試數 |
+|--------|------|--------|
+| `TestDetectScenario` | `detect_scenario()` | 3 |
+| `TestGetCodespacePath` | `get_codespace_path()` | 2 |
+| `TestResolveItems` | `resolve_items()` | 6 |
+| `TestApplyExcludePatterns` | `apply_exclude_patterns()` | 4 |
+| `TestGenerateClaudeMdSingle` | `generate_claude_md()` 單 Expert | 4 |
+| `TestGenerateClaudeMdMulti` | `generate_claude_md()` 多 Expert | 4 |
+| `TestWriteEnvFile` | `write_env_file()` + 環境變數驗證 | 10 |
+| `TestInstalledExpertsSchema` | `.installed-experts.json` 讀寫 | 3 |
+| `TestIntegrationInit` | `--init` 整合測試 | 8 |
+| `TestIntegrationAdd` | `--add` 整合測試 | 5 |
+| `TestIntegrationRemove` | `--remove` 整合測試 | 5 |
+| `TestIntegrationUninstall` | `--uninstall` 整合測試 | 3 |
 
 ---
 
