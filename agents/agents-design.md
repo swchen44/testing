@@ -677,7 +677,7 @@ install.py 在 workspace 根目錄建立隱藏資料夾 `.connsys-jarvis/`，存
 workspace/
 ├── .connsys-jarvis/              ← install.py 建立（.gitignore 排除）
 │   ├── .env                      ← 環境變數（source .connsys-jarvis/.env）
-│   ├── .installed-experts        ← 目前已安裝的 Expert 清單（每行一個 expert.json path）
+│   ├── .installed-experts.json   ← 已安裝 Expert 狀態清單（JSON，schema 詳見 §5.3.1）
 │   ├── log/                      ← install.py 執行 debug log
 │   │   └── 2026-03-26/
 │   │       └── install.log
@@ -689,6 +689,78 @@ workspace/
 ```
 
 > Windows 不支援 symlink 時，install.py 自動降級為 copy 模式（功能相同，但更新 expert 後需重新安裝）。
+
+### 5.3.1 .installed-experts.json Schema
+
+install.py 在每次 `--init` / `--add` / `--remove` 後更新此檔，記錄完整安裝狀態供後續操作使用。
+
+**欄位說明**：
+
+| 欄位 | 型別 | 說明 |
+|------|------|------|
+| `schema_version` | string | 格式版本，目前為 `"1.0"` |
+| `updated_at` | string（ISO 8601） | 最後一次 install.py 更新的時間 |
+| `experts[].name` | string | 對應 expert.json 的 `name` |
+| `experts[].domain` | string | 對應 expert.json 的 `domain` |
+| `experts[].version` | string | 對應 expert.json 的 `version` |
+| `experts[].path` | string | 相對 connsys-jarvis 根目錄的 expert.json 路徑 |
+| `experts[].installed_at` | string（ISO 8601） | 此 Expert 被安裝的時間 |
+| `experts[].install_order` | integer | 安裝順序（越大越新）；CLAUDE.md identity 以最大值的 Expert 為主 |
+| `experts[].is_identity` | boolean | 是否以此 Expert 的 soul/rules/duties 作為 CLAUDE.md 主 identity（`install_order` 最大者為 `true`） |
+| `experts[].declared_symlinks` | object | 此 Expert 宣告的所有 symlink（dependencies + internal，套用 exclude_symlink 後）；`--remove` 時做 reference count，count 歸零才刪除 |
+
+**Reference Count 規則**：`--remove expert-A` 時，遍歷剩餘 experts 的 `declared_symlinks`，若某 symlink 仍被其他 expert 聲明，則保留；只有 count = 0 的才從 `.claude/` 刪除。
+
+**完整範例**（已安裝 framework-base-expert + wifi-bora-memory-slim-expert）：
+
+```json
+{
+  "schema_version": "1.0",
+  "updated_at": "2026-03-26T10:30:00Z",
+  "experts": [
+    {
+      "name": "framework-base-expert",
+      "domain": "framework",
+      "version": "1.0.0",
+      "path": "framework/experts/framework-base-expert/expert.json",
+      "installed_at": "2026-03-26T09:00:00Z",
+      "install_order": 1,
+      "is_identity": false,
+      "declared_symlinks": {
+        "skills":   ["framework-expert-discovery-knowhow", "framework-handoff-flow", "framework-memory-tool"],
+        "hooks":    ["session-start.sh", "session-end.sh", "pre-compact.sh", "mid-session-checkpoint.sh", "shared-utils.sh"],
+        "agents":   [],
+        "commands": ["framework-experts-tool", "framework-handoff-tool"]
+      }
+    },
+    {
+      "name": "wifi-bora-memory-slim-expert",
+      "domain": "wifi-bora",
+      "version": "1.0.0",
+      "path": "wifi-bora/experts/wifi-bora-memory-slim-expert/expert.json",
+      "installed_at": "2026-03-26T10:30:00Z",
+      "install_order": 2,
+      "is_identity": true,
+      "declared_symlinks": {
+        "skills": [
+          "framework-expert-discovery-knowhow", "framework-handoff-flow", "framework-memory-tool",
+          "wifi-bora-arch-knowhow", "wifi-bora-memory-knowhow", "wifi-bora-linkerscript-knowhow",
+          "wifi-bora-symbolmap-knowhow", "wifi-bora-build-flow",
+          "sys-bora-gerrit-commit-flow", "sys-bora-preflight-flow",
+          "wifi-bora-memslim-flow", "wifi-bora-ast-tool", "wifi-bora-lsp-tool", "wifi-bora-wut-tool"
+        ],
+        "hooks":    ["session-start.sh", "session-end.sh", "pre-compact.sh", "mid-session-checkpoint.sh"],
+        "agents":   [],
+        "commands": ["framework-experts-tool", "framework-handoff-tool"]
+      }
+    }
+  ]
+}
+```
+
+**移除範例**：若執行 `--remove wifi-bora-memory-slim-expert`：
+- `wifi-bora-memslim-flow`, `wifi-bora-ast-tool`, `wifi-bora-lsp-tool`, `wifi-bora-wut-tool` → 只有 memory-slim 聲明 → count=0 → **刪除**
+- `framework-expert-discovery-knowhow`, `session-start.sh` 等 → framework-base-expert 仍聲明 → count=1 → **保留**
 
 ### 5.4 .env 環境變數設計
 
@@ -739,7 +811,7 @@ Step 3：套用 exclude_symlink 過濾不需要的 link
 
 Step 4：清除舊 link，重建 .claude/skills/、hooks/、agents/、commands/
 
-Step 5：更新 .connsys-jarvis/.installed-experts
+Step 5：更新 .connsys-jarvis/.installed-experts.json
 Step 6：重新生成 workspace/CLAUDE.md（詳見 §9）
 Step 7：更新 .connsys-jarvis/.env
 Step 8：印出變更清單（新增/移除/保留）+ source 提示

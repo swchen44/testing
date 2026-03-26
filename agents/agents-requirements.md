@@ -277,7 +277,7 @@
 - `--add` 不移除現有 symlinks，只補建新 expert 的 internal skills
 - 已存在的 symlink 跳過（idempotent，不報錯）
 - CLAUDE.md 重新生成，所有已安裝 Expert 均出現在 @include 清單中
-- `.connsys-jarvis/.installed-experts`（安裝狀態記錄）更新，新增 wifi-bora-coverity-expert 條目
+- `.connsys-jarvis/.installed-experts.json`（安裝狀態記錄）更新，新增 wifi-bora-coverity-expert 條目
 
 ---
 
@@ -296,9 +296,9 @@
    - 找出 wifi-bora-coverity-expert 的 internal skills（coverity-flow, coverity-cr-tool, risk-report-flow）
    - 若這些 skill 的 symlink 沒有被其他已安裝 Expert 引用 → 刪除
    - 若有共用（如 wifi-bora-risk-report-flow 被另一 expert 也引用）→ 保留
-   - 更新 .connsys-jarvis/.installed-experts，移除 coverity-expert 條目
+   - 更新 .connsys-jarvis/.installed-experts.json，移除 coverity-expert 條目
 4. 因 CLAUDE.md 無法部分刪減（它是整體生成的），需要重建：
-   install.py 自動根據 .installed-experts 的剩餘清單重新執行 --add 邏輯
+   install.py 自動根據 .installed-experts.json 的剩餘清單重新執行 --add 邏輯
    → 等同於 --add wifi-bora-base-expert（只保留 base）
 5. 重新生成 CLAUDE.md，只剩 wifi-bora-base-expert 的 @include
 6. 印出變更清單：
@@ -310,10 +310,10 @@
 **驗收條件**：
 - `--remove` 只刪除「無其他 expert 依賴」的 symlinks，共用 skills 保留
 - CLAUDE.md 自動重建，移除後只包含剩餘 Expert 的 @include
-- `.connsys-jarvis/.installed-experts` 正確更新
-- 若移除後 .installed-experts 為空，CLAUDE.md 退回最小化內容（僅 framework hooks）
+- `.connsys-jarvis/.installed-experts.json` 正確更新
+- 若移除後 .installed-experts.json 為空，CLAUDE.md 退回最小化內容（僅 framework hooks）
 
-**為什麼需要 --remove + 重建而非單純刪 symlink**：CLAUDE.md 是整體生成的文件，無法只刪除部分 @include 行；需透過 install.py 根據剩餘 .installed-experts 完整重新生成，才能確保 CLAUDE.md 與實際 symlinks 保持一致。
+**為什麼需要 --remove + 重建而非單純刪 symlink**：CLAUDE.md 是整體生成的文件，無法只刪除部分 @include 行；需透過 install.py 根據剩餘 .installed-experts.json 完整重新生成，才能確保 CLAUDE.md 與實際 symlinks 保持一致。
 
 ---
 
@@ -448,7 +448,7 @@ workspace/                                       ← $CONNSYS_JARVIS_WORKSPACE_R
 │
 ├── .connsys-jarvis/                             ← install.py 建立（.gitignore 排除）
 │   ├── .env                                     ← 環境變數（source .connsys-jarvis/.env）
-│   ├── .installed-experts                       ← 已安裝 Expert 清單
+│   ├── .installed-experts.json                       ← 已安裝 Expert 清單
 │   ├── log/
 │   └── memory/                                  ← 本地三區記憶
 │       ├── shared/                              ← Zone 1：跨 Expert 共用知識
@@ -571,7 +571,7 @@ workspace/                                       ← $CONNSYS_JARVIS_WORKSPACE_R
 │
 ├── .connsys-jarvis/                             ← install.py 建立（.gitignore 排除）
 │   ├── .env                                     ← 環境變數（source .connsys-jarvis/.env）
-│   ├── .installed-experts                       ← 已安裝 Expert 清單
+│   ├── .installed-experts.json                       ← 已安裝 Expert 清單
 │   ├── log/
 │   └── memory/                                  ← 本地三區記憶
 │       ├── shared/                              ← Zone 1：跨 Expert 共用知識
