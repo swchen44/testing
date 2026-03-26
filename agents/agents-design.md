@@ -1,8 +1,8 @@
 # Consys Experts — 設計書
 
-**文件版本**：v3.0
+**文件版本**：v3.1
 **狀態**：Draft
-**依據**：agents-requirements.md v3.0
+**依據**：agents-requirements.md v3.1
 
 > **注意**：本文件中所列的 expert、skill 名稱均為**示例**，用於說明命名規則與架構設計。實際 expert 與 skill 的規劃以團隊討論為準。
 
@@ -223,7 +223,7 @@ connsys-experts/
 
 | 部分 | 說明 | 範例 |
 |------|------|------|
-| `[domain]` | Layer 1 的 domain 名稱 | `wifi`, `bt`, `framework` |
+| `[domain]` | Layer 1 的 domain 名稱 | `wifi-bora`, `wifi-gen4m`, `wifi-logan`, `bt-bora`, `sys-bora`, `lrwpan-bora`, `framework` |
 | `[skill-name]` | 描述性名稱（英文，用 `-` 分隔） | `build`, `coredump`, `handoff` |
 | `[type]` | `flow` / `knowhow` / `tool` | `flow` |
 
@@ -316,212 +316,161 @@ system-cicd-tool
 
 ## 3. 完整目錄結構
 
-```
-connsys-experts/ (git)
+connsys-experts/
+├── install.py                      ← 唯一安裝程式（Python stdlib）
 ├── README.md
-├── registry.json                            ← 全域 Expert 目錄
-├── install.sh                               ← 頂層：env vars + clone connsys-memory
 │
-├── framework/
-│   ├── experts/
-│   │   ├── framework-common-expert/         ← 跨所有 domain 共用（install.sh 無作用）
-│   │   │   ├── README.md
-│   │   │   ├── install.sh                   ← 無作用
-│   │   │   ├── expert.json
-│   │   │   ├── skills/
-│   │   │   │   ├── framework-expert-discovery-knowhow/  ← Layer 5 完整示例
-│   │   │   │   │   ├── SKILL.md             ← Skill 主體
-│   │   │   │   │   ├── README.md            ← History、使用說明、Design、目的
-│   │   │   │   │   ├── test/               ← Skill 測試腳本或測試用 JSON
-│   │   │   │   │   └── report/             ← 執行過程、結果、token 用量
-│   │   │   │   ├── framework-handoff-flow/ ← 以下 skill 均同 Layer 5 結構（SKILL.md / README.md / test/ / report/）
-│   │   │   │   │   └── SKILL.md
-│   │   │   │   └── framework-memory-tool/
-│   │   │   │       └── SKILL.md
-│   │   │   ├── hooks/                       ← 所有 Expert 共用的 hooks（Shell 優先）
-│   │   │   │   ├── session-start.sh         ← 載入交接文件與共用記憶
-│   │   │   │   ├── session-end.sh           ← 儲存記憶、push connsys-memory
-│   │   │   │   ├── pre-compact.sh           ← context 壓縮前存快照
-│   │   │   │   ├── mid-session-checkpoint.sh← 每 20 訊息存檔
-│   │   │   │   ├── shared-utils.sh          ← 共用 Shell functions
-│   │   │   │   └── memory-helper.py         ← 複雜記憶操作（JSON/YAML 解析等）
-│   │   │   ├── commands/
-│   │   │   │   ├── framework-experts-tool/
-│   │   │   │   │   └── COMMAND.md
-│   │   │   │   └── framework-handoff-tool/
-│   │   │   │       └── COMMAND.md
-│   │   │   ├── test/                        ← Expert 層級測試腳本
-│   │   │   └── report/                      ← 執行過程、結果、token 用量
-│   │   │
-│   │   ├── framework-skill-create-expert/
-│   │   │   ├── README.md
-│   │   │   ├── install.sh
-│   │   │   ├── expert.json
-│   │   │   ├── CLAUDE.md
-│   │   │   ├── skills/
-│   │   │   │   ├── framework-skill-create-flow/
-│   │   │   │   │   └── SKILL.md
-│   │   │   │   └── framework-skill-evaluate-knowhow/
-│   │   │   │       └── SKILL.md
-│   │   │   ├── hooks/
-│   │   │   ├── commands/
-│   │   │   ├── test/
-│   │   │   └── report/
-│   │   │
-│   │   └── framework-learn-expert/
-│   │       ├── README.md
-│   │       ├── install.sh
-│   │       ├── expert.json
-│   │       ├── CLAUDE.md
-│   │       ├── skills/
-│   │       │   ├── framework-learn-flow/
-│   │       │   │   └── SKILL.md
-│   │       │   └── framework-feedback-knowhow/
-│   │       │       └── SKILL.md
-│   │       ├── hooks/
-│   │       ├── commands/
-│   │       ├── test/
-│   │       └── report/
-│   │
-│   └── external-experts/
-│       ├── skill-creator/                   ← git submodule
-│       └── claude-memory-engine/            ← git submodule（參考實作）
+├── framework/                      ← 框架 domain（跨所有 domain 共用）
+│   └── experts/
+│       └── framework-base-expert/  ← 共用 skill/hook/agent 容器
+│           ├── expert.json
+│           ├── expert.md
+│           ├── soul.md
+│           ├── rules.md
+│           ├── duties.md
+│           ├── skills/
+│           │   ├── framework-expert-discovery-knowhow/
+│           │   ├── framework-handoff-flow/
+│           │   ├── framework-memory-tool/
+│           │   └── framework-skill-create-flow/
+│           ├── hooks/
+│           │   ├── session-start.sh
+│           │   ├── session-end.sh
+│           │   ├── pre-compact.sh
+│           │   └── mid-session-checkpoint.sh
+│           ├── agents/
+│           ├── commands/
+│           │   ├── framework-experts-tool/
+│           │   └── framework-handoff-tool/
+│           ├── test/ └── report/ └── README.md
 │
-├── wifi/
-│   ├── experts/
-│   │   ├── wifi-common-expert/              ← wifi domain 共用（install.sh 無作用）【示例】
-│   │   │   ├── README.md
-│   │   │   ├── install.sh                   ← 無作用
-│   │   │   ├── expert.json
-│   │   │   ├── skills/
-│   │   │   │   ├── wifi-protocol-knowhow/   ← Wi-Fi 協定基礎知識
-│   │   │   │   │   └── SKILL.md
-│   │   │   │   ├── wifi-arch-knowhow/       ← SW/HW 架構知識
-│   │   │   │   │   └── SKILL.md
-│   │   │   │   └── wifi-coderule-knowhow/   ← 程式碼撰寫規則
-│   │   │   │       └── SKILL.md
-│   │   │   │   # 注：gerrit/repo/preflight 工具移至 system domain
-│   │   │   ├── hooks/                       ← wifi 專屬 hooks（可選）
-│   │   │   ├── commands/
-│   │   │   ├── test/
-│   │   │   └── report/
-│   │   │
-│   │   ├── wifi-build-expert/               ← 【示例】
-│   │   │   ├── README.md
-│   │   │   ├── install.sh                   ← 依 expert.json 安裝三層 symlinks
-│   │   │   ├── expert.json
-│   │   │   ├── CLAUDE.md
-│   │   │   ├── skills/
-│   │   │   │   ├── wifi-build-flow/         ← fw build 流程 SOP
-│   │   │   │   │   └── SKILL.md
-│   │   │   │   ├── wifi-drv-gen4m-build-flow/ ← gen4m driver build 流程
-│   │   │   │   │   └── SKILL.md
-│   │   │   │   ├── wifi-builderror-knowhow/
-│   │   │   │   │   └── SKILL.md
-│   │   │   │   ├── wifi-linkerscript-knowhow/
-│   │   │   │   │   └── SKILL.md
-│   │   │   │   └── wifi-rompatch-knowhow/
-│   │   │   │       └── SKILL.md
-│   │   │   ├── hooks/
-│   │   │   ├── commands/
-│   │   │   ├── test/
-│   │   │   └── report/
-│   │   │
-│   │   ├── wifi-debug-expert/
-│   │   │   ├── README.md
-│   │   │   ├── install.sh
-│   │   │   ├── expert.json
-│   │   │   ├── CLAUDE.md
-│   │   │   ├── skills/
-│   │   │   │   ├── wifi-debug-flow/
-│   │   │   │   │   └── SKILL.md
-│   │   │   │   ├── wifi-coredump-knowhow/
-│   │   │   │   │   └── SKILL.md
-│   │   │   │   ├── wifi-symbolmap-knowhow/
-│   │   │   │   │   └── SKILL.md
-│   │   │   │   ├── wifi-memory-knowhow/
-│   │   │   │   │   └── SKILL.md
-│   │   │   │   ├── wifi-uart-tool/
-│   │   │   │   │   └── SKILL.md
-│   │   │   │   └── wifi-adbshell-tool/
-│   │   │   │       └── SKILL.md
-│   │   │   ├── hooks/
-│   │   │   ├── commands/
-│   │   │   ├── test/
-│   │   │   └── report/
-│   │   │
-│   │   └── wifi-cicd-expert/                ← 【示例】
-│   │       ├── README.md
-│   │       ├── install.sh
-│   │       ├── expert.json
-│   │       ├── CLAUDE.md
-│   │       ├── skills/
-│   │       │   ├── wifi-cicd-flow/
-│   │       │   │   └── SKILL.md
-│   │       │   └── wifi-autotest-tool/      ← AUTOTEST 平台操作
-│   │       │       └── SKILL.md
-│   │       │   # 注：preflight 工具移至 system domain
-│   │       ├── hooks/
-│   │       ├── commands/
-│   │       ├── test/
-│   │       └── report/
-│   │
-│   └── external-experts/                    ← wifi 特定的外部工具
+├── sys-bora/                       ← System / SoC platform domain
+│   └── experts/
+│       ├── sys-bora-base-expert/   ← sys domain 共用知識容器
+│       │   ├── expert.json
+│       │   ├── skills/
+│       │   │   ├── sys-bora-gerrit-tool/
+│       │   │   ├── sys-bora-repo-tool/
+│       │   │   ├── sys-bora-build-knowhow/
+│       │   │   ├── sys-bora-arch-knowhow/
+│       │   │   ├── sys-bora-ld-knowhow/
+│       │   │   ├── sys-bora-config-knowhow/
+│       │   │   └── sys-bora-manifest-build-knowhow/
+│       │   ├── hooks/ ├── agents/ ├── commands/ ├── test/ └── report/
+│       │
+│       └── sys-bora-preflight-expert/   ← 跨 domain 共用工具（非 base）
+│           ├── expert.json              ← depends on sys-bora-base-expert
+│           ├── skills/
+│           │   ├── sys-bora-preflight-flow/
+│           │   ├── sys-bora-preflight-result-tool/
+│           │   ├── sys-bora-gerrit-commit-flow/
+│           │   └── sys-bora-ci-label-knowhow/
+│           ├── agents/
+│           │   └── preflight-monitor.md
+│           ├── hooks/ ├── commands/ ├── test/ └── report/
 │
-├── bt/
-│   ├── experts/
-│   │   ├── bt-common-expert/                ← bt domain 共用【示例】
-│   │   │   ├── README.md
-│   │   │   ├── install.sh                   ← 無作用
-│   │   │   ├── expert.json
-│   │   │   ├── skills/
-│   │   │   │   ├── bt-protocol-knowhow/
-│   │   │   │   │   └── SKILL.md
-│   │   │   │   ├── bt-arch-knowhow/
-│   │   │   │   │   └── SKILL.md
-│   │   │   │   └── bt-coderule-knowhow/     ← bt 程式碼撰寫規則
-│   │   │   │       └── SKILL.md
-│   │   │   │   # 注：bt-coredump-knowhow / bt-gerrit-tool 已移除
-│   │   │   │   # 注：gerrit 工具改由 system-gerrit-tool 提供
-│   │   │   ├── hooks/
-│   │   │   ├── commands/
-│   │   │   ├── test/
-│   │   │   └── report/
-│   │   ├── bt-build-expert/                 ← 【示例】
-│   │   │   ├── skills/
-│   │   │   │   ├── bt-build-flow/
-│   │   │   │   │   └── SKILL.md
-│   │   │   │   └── bt-fw-build-flow/        ← bt fw 完整 build 流程
-│   │   │   │       └── SKILL.md
-│   │   │   ├── hooks/ ├── commands/ ├── test/ └── report/
-│   │   └── bt-debug-expert/                 ← 【示例】
-│   │       ├── skills/ ├── hooks/ ├── commands/ ├── test/ └── report/
-│   └── external-experts/
+├── wifi-bora/                      ← WiFi Bora firmware domain
+│   └── experts/
+│       ├── wifi-bora-base-expert/  ← wifi-bora 共用知識容器
+│       │   ├── expert.json
+│       │   ├── skills/
+│       │   │   ├── wifi-bora-protocol-knowhow/
+│       │   │   ├── wifi-bora-arch-knowhow/
+│       │   │   ├── wifi-bora-coderule-knowhow/
+│       │   │   ├── wifi-bora-build-flow/
+│       │   │   ├── wifi-bora-rompatch-knowhow/
+│       │   │   ├── wifi-bora-linkerscript-knowhow/
+│       │   │   ├── wifi-bora-symbolmap-knowhow/
+│       │   │   ├── wifi-bora-memory-knowhow/
+│       │   │   └── wifi-bora-sds-knowhow/
+│       │   ├── hooks/ ├── agents/ ├── commands/ ├── test/ └── report/
+│       │
+│       ├── wifi-bora-memory-slim-expert/
+│       │   ├── expert.json   ← depends: wifi-bora-base, sys-bora-preflight
+│       │   ├── skills/
+│       │   │   ├── wifi-bora-memslim-flow/
+│       │   │   ├── wifi-bora-ast-tool/
+│       │   │   ├── wifi-bora-lsp-tool/
+│       │   │   └── wifi-bora-wut-tool/
+│       │   ├── agents/ ├── hooks/ ├── commands/ ├── test/ └── report/
+│       │
+│       ├── wifi-bora-cr-robot-expert/
+│       │   ├── expert.json   ← depends: wifi-bora-base, sys-bora-preflight
+│       │   ├── skills/
+│       │   │   ├── wifi-bora-debug-sop-flow/
+│       │   │   ├── wifi-bora-coredump-knowhow/
+│       │   │   ├── wifi-bora-ast-tool/
+│       │   │   ├── wifi-bora-lsp-tool/
+│       │   │   ├── wifi-bora-wut-tool/
+│       │   │   └── wifi-bora-risk-report-flow/
+│       │   ├── agents/ ├── hooks/ ├── commands/ ├── test/ └── report/
+│       │
+│       └── wifi-bora-coverity-expert/
+│           ├── expert.json   ← depends: wifi-bora-base, sys-bora-preflight
+│           ├── skills/
+│           │   ├── wifi-bora-coverity-flow/
+│           │   ├── wifi-bora-coverity-cr-tool/
+│           │   └── wifi-bora-risk-report-flow/
+│           ├── agents/ ├── hooks/ ├── commands/ ├── test/ └── report/
 │
-└── system/
-    ├── experts/
-    │   ├── system-common-expert/            ← system domain 共用（含跨 domain 工具）【示例】
-    │   │   ├── README.md
-    │   │   ├── install.sh                   ← 無作用
-    │   │   ├── expert.json
-    │   │   ├── skills/
-    │   │   │   ├── system-gerrit-tool/      ← Gerrit 操作（原 wifi-gerrit-tool）
-    │   │   │   │   └── SKILL.md
-    │   │   │   ├── system-repo-multi-repo-tool/ ← Android repo / multi-repo 操作（原 wifi-repo-tool）
-    │   │   │   │   └── SKILL.md
-    │   │   │   ├── system-preflight-tool/   ← Preflight dashboard 查詢（原 wifi-preflight-tool）
-    │   │   │   │   └── SKILL.md
-    │   │   │   ├── system-core-tracer-gdb-tool/ ← CoreTracer / GDB 工具操作
-    │   │   │   │   └── SKILL.md
-    │   │   │   └── system-device-tool/      ← tmux/ssh/uart/adb 裝置控制
-    │   │   │       └── SKILL.md
-    │   │   ├── hooks/ ├── commands/ ├── test/ └── report/
-    │   ├── system-cicd-expert/              ← 【示例】
-    │   │   ├── skills/ ├── hooks/ ├── commands/ ├── test/ └── report/
-    │   └── system-device-expert/            ← 【示例】
-    │       ├── skills/ ├── hooks/ ├── commands/ ├── test/ └── report/
-    └── external-experts/
+├── bt-bora/                        ← Bluetooth Bora firmware domain
+│   └── experts/
+│       ├── bt-bora-base-expert/    ← bt-bora 共用知識容器
+│       │   ├── expert.json
+│       │   ├── skills/
+│       │   │   ├── bt-bora-protocol-knowhow/
+│       │   │   ├── bt-bora-arch-knowhow/
+│       │   │   ├── bt-bora-coderule-knowhow/
+│       │   │   ├── bt-bora-build-flow/
+│       │   │   └── bt-bora-sds-knowhow/
+│       │   ├── hooks/ ├── agents/ ├── commands/ ├── test/ └── report/
+│       │
+│       └── bt-bora-security-expert/
+│           ├── expert.json   ← depends: bt-bora-base, sys-bora-preflight
+│           ├── skills/
+│           │   ├── bt-bora-security-rule-knowhow/
+│           │   ├── bt-bora-security-analysis-flow/
+│           │   ├── bt-bora-ast-tool/
+│           │   └── bt-bora-lsp-tool/
+│           ├── agents/ ├── hooks/ ├── commands/ ├── test/ └── report/
+│
+├── lrwpan-bora/                    ← LR-WPAN (802.15.4) Bora firmware domain
+│   └── experts/
+│       └── lrwpan-bora-base-expert/
+│           ├── expert.json
+│           ├── skills/
+│           │   ├── lrwpan-bora-protocol-knowhow/
+│           │   ├── lrwpan-bora-arch-knowhow/
+│           │   ├── lrwpan-bora-build-flow/
+│           │   └── lrwpan-bora-sds-knowhow/
+│           ├── hooks/ ├── agents/ ├── commands/ ├── test/ └── report/
+│
+├── wifi-gen4m/                     ← WiFi Gen4M driver domain
+│   └── experts/
+│       └── wifi-gen4m-base-expert/
+│           ├── expert.json
+│           ├── skills/
+│           │   ├── wifi-gen4m-protocol-knowhow/
+│           │   ├── wifi-gen4m-arch-knowhow/
+│           │   ├── wifi-gen4m-build-flow/
+│           │   └── wifi-gen4m-sds-knowhow/
+│           ├── hooks/ ├── agents/ ├── commands/ ├── test/ └── report/
+│
+└── wifi-logan/                     ← WiFi Logan driver domain
+    └── experts/
+        └── wifi-logan-base-expert/
+            ├── expert.json
+            ├── skills/
+            │   ├── wifi-logan-protocol-knowhow/
+            │   ├── wifi-logan-arch-knowhow/
+            │   ├── wifi-logan-build-flow/
+            │   └── wifi-logan-sds-knowhow/
+            ├── hooks/ ├── agents/ ├── commands/ ├── test/ └── report/
+
 ```
+
+> **cross-domain dependency 範例**：`wifi-bora-cr-robot-expert` 的 expert.json 列出
+> `sys-bora-preflight-expert` 作為 dependency，並指定只繼承其特定 skills，實現跨 domain 共用。
 
 ---
 
@@ -595,24 +544,63 @@ connsys-experts/ (git)
 }
 ```
 
-### 4.2 Common Expert（無 dependencies，僅描述）
+### 4.2 Base Expert（共用資源容器）
+
+Base expert 本身無 dependencies，作為該 domain 共用 skill/hook/agent/command 的容器。其他 expert 透過 `dependencies` 引用它。
 
 ```json
 {
-  "name": "wifi-common-expert",
-  "display_name": "WiFi Common (shared container)",
-  "domain": "wifi",
-  "description": "wifi domain 共用 skill/hook/command 的容器",
+  "name": "wifi-bora-base-expert",
+  "display_name": "WiFi Bora Base",
+  "domain": "wifi-bora",
+  "description": "wifi-bora domain 共用 skill/hook/command/agent 的容器",
   "version": "1.0.0",
-  "is_common": true,
-  "install_action": "none",
+  "is_base": true,
+  "dependencies": [],
+  "private": {
+    "skills":   ["wifi-bora-protocol-knowhow", "wifi-bora-arch-knowhow", "wifi-bora-coderule-knowhow",
+                 "wifi-bora-build-flow", "wifi-bora-rompatch-knowhow", "wifi-bora-linkerscript-knowhow",
+                 "wifi-bora-symbolmap-knowhow", "wifi-bora-memory-knowhow", "wifi-bora-sds-knowhow"],
+    "hooks":    ["session-start", "session-end", "pre-compact", "mid-session-checkpoint"],
+    "agents":   [],
+    "commands": []
+  },
   "exclude_symlink": {
-    "skills": [],
-    "hooks":  [],
-    "agents": []
+    "patterns": []
   }
 }
 ```
+
+### 4.3 exclude_symlink 設計（全域 regex 過濾）
+
+`exclude_symlink.patterns` 是**全域正則表達式清單**，在所有 symlink 建立完成後，移除名稱符合任一 pattern 的 link。
+
+**執行順序**：
+```
+Step 1：依每個 dependency 的 skills/hooks/agents/commands 選擇清單建立 link
+Step 2：建立本 expert 自己的 private skills/hooks/agents/commands 的 link
+Step 3：套用 exclude_symlink.patterns，移除名稱符合任一 regex 的 link（全域過濾）
+```
+
+範例：
+```json
+"exclude_symlink": {
+  "patterns": [
+    ".*-linkerscript-.*",   // 移除所有含 linkerscript 的 link
+    ".*-debug-.*"           // 移除所有含 debug 的 link
+  ]
+}
+```
+
+### 4.4 dependencies 選擇規則
+
+| 情況 | 寫法 | 效果 |
+|------|------|------|
+| **繼承全部** | `"skills": ["all"]` | symlink 該 expert 的所有 skills |
+| **正面表列** | `"skills": ["foo-tool", "bar-flow"]` | 只 symlink 指定的 skills |
+| **省略 key** | `"skills"` 欄位不寫 | 不繼承該 expert 的任何 skills（空集合）|
+
+> `"hooks"`, `"agents"`, `"commands"` 同理。四個 key 各自獨立控制。
 
 ---
 

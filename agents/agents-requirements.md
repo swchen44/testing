@@ -1,6 +1,6 @@
 # Consys Experts — 需求書
 
-**文件版本**：v3.0
+**文件版本**：v3.1
 **狀態**：Draft
 **目標讀者**：架構師、開發者、產品負責人
 **改版說明**：
@@ -15,6 +15,7 @@
 - v2.8：Skill/Hook scripts Shell 優先、Python 採 PEP 723 inline metadata、pytest test_xxx.py
 - v2.9：多 Expert 安裝/卸載需求、 install.py --doctor、Python 版本檢查、Skill 與 Command 邊界釐清、限制補充（Skill 版本相容性、memory GC）、Future Work 補充（registry.json、Skill README 範本）
 - v3.0：架構重大重設計——install.sh 改為單一 install.py（stdlib only）、expert 資料夾移除 CLAUDE.md 和 install.sh、新增 soul.md / rules.md / duties.md / agents/ 資料夾、記憶改用 .connsys-expert/memory/、環境變數輸出至 .connsys-expert/.env、新增 symlink 靈活性設計原則（因應 agent 生態快速演進）
+- v3.1：expert.json dependencies 改為陣列格式（支援 all/正面表列/省略=不繼承）、exclude_symlink 改為全域 regex patterns（3-step 執行順序）、更新 domain 清單（wifi-bora/sys-bora/bt-bora/lrwpan-bora/wifi-gen4m/wifi-logan）、common 改為 base、加入新 expert 清單
 
 > **注意**：文件中所列的 expert、skill 名稱均為**示例**，用於說明命名規則與架構設計。實際規劃以團隊討論為準。
 
@@ -534,6 +535,24 @@ workspace/                                       ← $CONNSYS_EXPERTS_WORKSPACE_
 | FR-01-4 | `framework-common-expert` 存放跨所有 domain 共用的 skills / hooks / commands；各 domain 的 `{domain}-common-expert` 存放該 domain 共用內容 | Must | 三層依賴（framework → domain → private）對應 Expert 定義的三個組件 |
 | FR-01-5 | `external/` 存放社群工具，以工具名稱為資料夾名（git submodule） | Should | 整合優質社群工具，避免重造輪子 |
 | FR-01-7 | Expert 資料夾新增 `agents/` 子資料夾，存放 Claude subagent 的 prompt 定義文件（`{agent-name}.md`） | Should | 支援 subagent 功能，可讓主 Expert 呼叫子任務 Agent（如 log 分析、文件查找）；參考 gitagent 設計 |
+| FR-01-8 | 開發 SOP：先在各 domain expert 的 private skills/hooks 中獨立實作；若發現多個 expert 共用，再移至該 domain 的 base expert；初期無法判斷歸屬時，可先當 private，之後再移入 base | Should | 避免過早抽象化；base expert 是有機成長的 |
+
+#### Expert 清單（初始規劃）
+
+| Expert | Domain | 依賴 | 任務描述 |
+|--------|--------|------|---------|
+| `framework-base-expert` | framework | — | 管理 connsys expert 生態系；提供建立 skill/expert、合規安全審查 |
+| `sys-bora-base-expert` | sys-bora | — | SoC/OS/build system 基礎知識；manifest 下載與 build.py 流程；cpu/os API、ld、firmware config 基礎 |
+| `sys-bora-preflight-expert` | sys-bora（跨 domain 共用）| sys-bora-base | gerrit commit/preflight 操作；CI/CD label 定義；preflight 結果分析與自動修復；tmux/agent-browser 操作 |
+| `wifi-bora-base-expert` | wifi-bora | — | wifi-bora fw 下載/編譯/build pass-fail；Wi-Fi 標準基礎；ROM patch/linkerscript；memory symbol；fw 架構與 SDS；自動上傳程式碼 |
+| `wifi-bora-memory-slim-expert` | wifi-bora | wifi-bora-base, sys-bora-preflight | 縮減 memory 用量；AST/LSP/assembly/ELF 分析；自動變異比較；WUT (googletest)；gerrit 上傳 |
+| `wifi-bora-cr-robot-expert` | wifi-bora | wifi-bora-base, sys-bora-preflight | 問題特徵分析；debug SOP；Log/dump/symbol 分析；source compile；自動驗證修復；WUT；gerrit 上傳；risk/bug report |
+| `wifi-bora-coverity-expert` | wifi-bora | wifi-bora-base, sys-bora-preflight | coverity 問題解決；CR 資料庫整合；local coverity 執行；WUT；gerrit 上傳；risk/bug report |
+| `bt-bora-base-expert` | bt-bora | — | bt-bora fw 下載/編譯/build pass-fail；BT 標準基礎；fw 架構與 SDS；自動上傳程式碼 |
+| `bt-bora-security-expert` | bt-bora | bt-bora-base, sys-bora-preflight | security rule 檢查；AST/LSP/assembly/ELF 分析；security insight 報告；gerrit 上傳 |
+| `lrwpan-bora-base-expert` | lrwpan-bora | — | lrwpan fw 下載/編譯；LR-WPAN (802.15.4) 標準基礎；fw 架構與 SDS；自動上傳 |
+| `wifi-gen4m-base-expert` | wifi-gen4m | — | wifi gen4m driver 下載/編譯；Wi-Fi 標準基礎；driver 架構與 SDS；自動上傳 |
+| `wifi-logan-base-expert` | wifi-logan | — | wifi logan driver 下載/編譯；Wi-Fi 標準基礎；driver 架構與 SDS；自動上傳 |
 | FR-01-6 | `registry.json` 列出所有 Expert 及其 metadata | Must | expert-discovery 的資料來源 |
 
 ### FR-02：install.py（取代 install.sh）
@@ -549,8 +568,8 @@ workspace/                                       ← $CONNSYS_EXPERTS_WORKSPACE_
 | FR-02-5 | 支援 `--uninstall` 參數：清除所有 link 和 CLAUDE.md，但保留 `.connsys-expert/log/` 和 `.connsys-expert/memory/` | Must | 完全清除安裝，保留記憶 |
 | FR-02-6 | 支援 `--list` 參數：列出目前已安裝的 Expert 清單及所有 symlink 及來源 | Must | 讓同仁了解目前安裝狀態 |
 | FR-02-7 | 支援 `--doctor` 參數：診斷所有 symlink 是否 dangling、列出已安裝 Expert、檢查 Python/uv/uvx 環境 | Must | 快速排查安裝問題 |
-| FR-02-8 | install.py 讀取 `expert.json` 的 `dependencies`，**遞迴解析所有依賴的 expert.json**，計算出完整的 symlink 清單 | Must | 自動帶入依賴的 Expert 內容，不需手動逐一安裝 |
-| FR-02-9 | expert.json 支援 `exclude_symlink` 欄位，可指定不建立 symlink 的 skills / hooks / agents 清單 | Must | 讓 Expert 可選擇性排除不需要的共用 link |
+| FR-02-8 | install.py 讀取 `expert.json` 的 `dependencies` 陣列，遞迴解析所有依賴，依選擇規則計算完整 symlink 清單：**①** `"all"` → 繼承全部；**②** 明確列出名稱 → 只繼承該清單；**③** 省略 key → 不繼承（空集合）。四個 key（skills/hooks/agents/commands）各自獨立控制 | Must | 精確控制每個依賴 expert 貢獻的 link，避免不必要的 skill 被載入 |
+| FR-02-9 | expert.json 支援 `exclude_symlink.patterns`（全域 regex 清單），在所有 link 建立完成後（Step 1+2），於 Step 3 移除名稱符合任一 pattern 的 link | Must | 全域過濾可跨所有 dependency 統一移除不需要的 link，正則表達式提供更彈性的匹配 |
 | FR-02-10 | install.py 執行後將環境變數寫入 `workspace/.connsys-expert/.env`；同仁需手動執行 `source .connsys-expert/.env` | Must | 環境變數需存入 shell，Python 程式本身無法修改 parent shell 環境 |
 | FR-02-11 | install.py 每次執行結束後自動印出提示訊息：`✅ 安裝完成。請執行：source .connsys-expert/.env` | Must | 避免同仁忘記 source，導致環境變數失效 |
 | FR-02-12 | install.py **不**修改 `settings.json` / `settings.local.json`（由 `setup-claude.sh` 處理）| Must | 解耦平台相依 |
