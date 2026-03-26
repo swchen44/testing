@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0",
+  "updated_at": "2026-03-26T09:15:06Z",
+  "experts": [
+    {
+      "name": "framework-base-expert",
+      "domain": "framework",
+      "version": "1.0.0",
+      "path": "framework/experts/framework-base-expert/expert.json",
+      "installed_at": "2026-03-26T09:15:06Z",
+      "install_order": 1,
+      "is_identity": true,
+      "declared_symlinks": {
+        "skills": [
+          "framework-expert-discovery-knowhow",
+          "framework-handoff-flow",
+          "framework-memory-tool"
+        ],
+        "hooks": [
+          "session-start.sh",
+          "session-end.sh",
+          "pre-compact.sh",
+          "mid-session-checkpoint.sh",
+          "shared-utils.sh"
+        ],
+        "agents": [],
+        "commands": [
+          "framework-experts-tool",
+          "framework-handoff-tool"
+        ]
+      }
+    }
+  ]
+}
