@@ -230,7 +230,7 @@
 ```
 1. 執行 uv run ./connsys-experts/install.py --init wifi/experts/wifi-cicd-expert/expert.json && source .connsys-expert/.env
 2. 系統先觸發 hand-off，儲存當前 session 狀態
-3. 移除舊 Expert 的所有 symlinks（common + private 全部替換）
+3. 移除舊 Expert 的所有 symlinks（common + internal 全部替換）
 4. 建立新 Expert 的 symlinks
 5. 重新生成 CLAUDE.md 與 expert.md
 6. 印出變更清單：
@@ -532,10 +532,10 @@ workspace/                                       ← $CONNSYS_EXPERTS_WORKSPACE_
 | FR-01-1 | repo 命名為 `connsys-experts`，Expert 資料夾命名為 `experts/` | Must | 避免與 AI 的「agent」概念混淆，名稱更 general |
 | FR-01-2 | 每個 Expert 資料夾含 `expert.json`、`expert.md`、`soul.md`、`rules.md`、`duties.md`、`skills/`、`hooks/`、`agents/`、`commands/`（相容層）、`test/`、`report/`、`README.md`；**不含 `install.sh` 和 `CLAUDE.md`**（由頂層 `install.py` 統一管理） | Must | 標準化結構，Expert 資料夾只含內容；安裝管理集中在根目錄；新增 agents/ 支援 subagent 功能 |
 | FR-01-3 | `expert.json` 含名稱、描述、觸發詞、skills、transitions、dependencies | Must | 資訊越完整，expert-discovery 越有用 |
-| FR-01-4 | `framework-common-expert` 存放跨所有 domain 共用的 skills / hooks / commands；各 domain 的 `{domain}-common-expert` 存放該 domain 共用內容 | Must | 三層依賴（framework → domain → private）對應 Expert 定義的三個組件 |
+| FR-01-4 | `framework-common-expert` 存放跨所有 domain 共用的 skills / hooks / commands；各 domain 的 `{domain}-common-expert` 存放該 domain 共用內容 | Must | 三層依賴（framework → domain → internal）對應 Expert 定義的三個組件 |
 | FR-01-5 | `external/` 存放社群工具，以工具名稱為資料夾名（git submodule） | Should | 整合優質社群工具，避免重造輪子 |
 | FR-01-7 | Expert 資料夾新增 `agents/` 子資料夾，存放 Claude subagent 的 prompt 定義文件（`{agent-name}.md`） | Should | 支援 subagent 功能，可讓主 Expert 呼叫子任務 Agent（如 log 分析、文件查找）；參考 gitagent 設計 |
-| FR-01-8 | 開發 SOP：先在各 domain expert 的 private skills/hooks 中獨立實作；若發現多個 expert 共用，再移至該 domain 的 base expert；初期無法判斷歸屬時，可先當 private，之後再移入 base | Should | 避免過早抽象化；base expert 是有機成長的 |
+| FR-01-8 | 開發 SOP：先在各 domain expert 的 internal skills/hooks 中獨立實作；若發現多個 expert 共用，再移至該 domain 的 base expert；初期無法判斷歸屬時，可先當 internal，之後再移入 base | Should | 避免過早抽象化；base expert 是有機成長的 |
 
 #### Expert 清單（初始規劃）
 

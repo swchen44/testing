@@ -41,7 +41,7 @@ Consys Expert = Agent 核心能力 + Workflow（hooks）+ Tool（commands）+ Kn
 每個 Expert 的內容分三個來源：
   ① framework-common-expert  → 跨所有 domain 共用
   ② {domain}-common-expert   → 該 domain 內部共用
-  ③ {expert} private         → 該 Expert 自己的私有內容
+  ③ {expert} internal        → 該 Expert 自己的私有內容
 
 全部透過 symlink 接入 workspace/.claude/（project level）
 ```
@@ -527,7 +527,7 @@ connsys-experts/
       "commands": []
     }
   },
-  "private": {
+  "internal": {
     "skills": [
       "wifi-build-flow",
       "wifi-builderror-knowhow",
@@ -557,7 +557,7 @@ Base expert 本身無 dependencies，作為該 domain 共用 skill/hook/agent/co
   "version": "1.0.0",
   "is_base": true,
   "dependencies": [],
-  "private": {
+  "internal": {
     "skills":   ["wifi-bora-protocol-knowhow", "wifi-bora-arch-knowhow", "wifi-bora-coderule-knowhow",
                  "wifi-bora-build-flow", "wifi-bora-rompatch-knowhow", "wifi-bora-linkerscript-knowhow",
                  "wifi-bora-symbolmap-knowhow", "wifi-bora-memory-knowhow", "wifi-bora-sds-knowhow"],
@@ -578,7 +578,7 @@ Base expert 本身無 dependencies，作為該 domain 共用 skill/hook/agent/co
 **執行順序**：
 ```
 Step 1：依每個 dependency 的 skills/hooks/agents/commands 選擇清單建立 link
-Step 2：建立本 expert 自己的 private skills/hooks/agents/commands 的 link
+Step 2：建立本 expert 自己的 internal skills/hooks/agents/commands 的 link
 Step 3：套用 exclude_symlink.patterns，移除名稱符合任一 regex 的 link（全域過濾）
 ```
 
@@ -641,7 +641,7 @@ source .connsys-expert/.env
 
 ### 5.2 install.py 的 Symlink 建立邏輯
 
-install.sh 讀取 `expert.json` 的 `dependencies` + `private`，依序在 workspace `.claude/` 建立 symlinks：
+install.py 讀取 `expert.json` 的 `dependencies` + `internal`，依序在 workspace `.claude/` 建立 symlinks：
 
 ```
 安裝 wifi-build-expert 時的 .claude/ 結果：
@@ -741,7 +741,7 @@ Step 1：讀取 expert.json，取得 dependencies 清單
 Step 2：遞迴讀取所有依賴的 expert.json，合併所有要建立的 link
   framework-common-expert → skills/*、hooks/*、agents/*
   wifi-common-expert      → skills/*
-  wifi-build-expert       → skills/*（private）
+  wifi-build-expert       → skills/*（internal）
 
 Step 3：套用 exclude_symlink 過濾不需要的 link
   wifi-build-expert.json 中若設定 "skills": ["wifi-linkerscript-knowhow"]
@@ -1667,3 +1667,47 @@ framework/experts/framework-learn-expert/skills/
 | [Lessons from Building Claude Code — How We Use Skills](https://github.com/swchen44/personal-knowledge-base-from-ai/blob/main/AI/2026-03-17-LESSONS-FROM-BUILDING-CLAUDE-CODE-HOW-WE-USE-SKILLS.md) | 實戰經驗：Claude Code 中 Skills 的使用心得 |
 | [5 Agent Skill Design Patterns Every ADK Developer Should Know](https://github.com/swchen44/personal-knowledge-base-from-ai/blob/main/AI/2026-03-18-5-AGENT-SKILL-DESIGN-PATTERNS-EVERY-ADK-DEVELOPER-SHOULD-KNOW.md) | ADK 開發者必知的 5 種 Skill 設計模式 |
 | [Claude-mem Code Analysis](https://github.com/swchen44/personal-knowledge-base-from-ai/blob/main/CodeAnalysis/2025-08-31-CLAUDE-MEM-CODE-ANALYSIS.md) | claude-mem 原始碼深度分析 |
+
+---
+
+## 18. Expert 總覽表
+
+### 表一：Domain / Expert / Internal Skills
+
+| Domain | Expert | Internal Skills（該 Expert 自己擁有的 skills） |
+|--------|--------|-----------------------------------------------|
+| framework | framework-base-expert | framework-expert-discovery-knowhow, framework-handoff-flow, framework-memory-tool, framework-skill-create-flow |
+| sys-bora | sys-bora-base-expert | sys-bora-gerrit-tool, sys-bora-repo-tool, sys-bora-build-knowhow, sys-bora-arch-knowhow, sys-bora-ld-knowhow, sys-bora-config-knowhow, sys-bora-manifest-build-knowhow |
+| sys-bora | sys-bora-preflight-expert | sys-bora-preflight-flow, sys-bora-preflight-result-tool, sys-bora-gerrit-commit-flow, sys-bora-ci-label-knowhow |
+| wifi-bora | wifi-bora-base-expert | wifi-bora-protocol-knowhow, wifi-bora-arch-knowhow, wifi-bora-coderule-knowhow, wifi-bora-build-flow, wifi-bora-rompatch-knowhow, wifi-bora-linkerscript-knowhow, wifi-bora-symbolmap-knowhow, wifi-bora-memory-knowhow, wifi-bora-sds-knowhow |
+| wifi-bora | wifi-bora-memory-slim-expert | wifi-bora-memslim-flow, wifi-bora-ast-tool, wifi-bora-lsp-tool, wifi-bora-wut-tool |
+| wifi-bora | wifi-bora-cr-robot-expert | wifi-bora-debug-sop-flow, wifi-bora-coredump-knowhow, wifi-bora-ast-tool, wifi-bora-lsp-tool, wifi-bora-wut-tool, wifi-bora-risk-report-flow |
+| wifi-bora | wifi-bora-coverity-expert | wifi-bora-coverity-flow, wifi-bora-coverity-cr-tool, wifi-bora-risk-report-flow |
+| bt-bora | bt-bora-base-expert | bt-bora-protocol-knowhow, bt-bora-arch-knowhow, bt-bora-coderule-knowhow, bt-bora-build-flow, bt-bora-sds-knowhow |
+| bt-bora | bt-bora-security-expert | bt-bora-security-rule-knowhow, bt-bora-security-analysis-flow, bt-bora-ast-tool, bt-bora-lsp-tool |
+| lrwpan-bora | lrwpan-bora-base-expert | lrwpan-bora-protocol-knowhow, lrwpan-bora-arch-knowhow, lrwpan-bora-build-flow, lrwpan-bora-sds-knowhow |
+| wifi-gen4m | wifi-gen4m-base-expert | wifi-gen4m-protocol-knowhow, wifi-gen4m-arch-knowhow, wifi-gen4m-build-flow, wifi-gen4m-sds-knowhow |
+| wifi-logan | wifi-logan-base-expert | wifi-logan-protocol-knowhow, wifi-logan-arch-knowhow, wifi-logan-build-flow, wifi-logan-sds-knowhow |
+
+> 備註：`*-ast-tool`、`*-lsp-tool`、`*-wut-tool` 跨多個 wifi-bora expert 共用；若後續多個 expert 均有相同工具，可考慮移至 wifi-bora-base-expert。
+
+---
+
+### 表二：Expert 相依圖
+
+| Expert | 依賴的 Expert |
+|--------|--------------|
+| framework-base-expert | —（無依賴，作為根節點） |
+| sys-bora-base-expert | —（無依賴） |
+| sys-bora-preflight-expert | sys-bora-base-expert |
+| wifi-bora-base-expert | —（無依賴） |
+| wifi-bora-memory-slim-expert | framework-base-expert, wifi-bora-base-expert, sys-bora-preflight-expert |
+| wifi-bora-cr-robot-expert | framework-base-expert, wifi-bora-base-expert, sys-bora-preflight-expert |
+| wifi-bora-coverity-expert | framework-base-expert, wifi-bora-base-expert, sys-bora-preflight-expert |
+| bt-bora-base-expert | —（無依賴） |
+| bt-bora-security-expert | framework-base-expert, bt-bora-base-expert, sys-bora-preflight-expert |
+| lrwpan-bora-base-expert | —（無依賴） |
+| wifi-gen4m-base-expert | —（無依賴） |
+| wifi-logan-base-expert | —（無依賴） |
+
+> 說明：`sys-bora-preflight-expert` 是跨 domain 的共用 preflight 工具，被 wifi-bora、bt-bora、lrwpan-bora 的功能型 expert 所依賴。`framework-base-expert` 提供 hand-off、memory、expert discovery 等基礎設施，所有功能型 expert 均應依賴。
