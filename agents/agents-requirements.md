@@ -1,6 +1,6 @@
 # Consys Experts — 需求書
 
-**文件版本**：v2.9
+**文件版本**：v3.0
 **狀態**：Draft
 **目標讀者**：架構師、開發者、產品負責人
 **改版說明**：
@@ -13,7 +13,8 @@
 - v2.6：Hook 實作語言改為 Shell 優先，複雜邏輯用 Python，JS 為最後考慮
 - v2.7：專案更名 consys → connsys（雙 n），更新所有 repo/env var 名稱
 - v2.8：Skill/Hook scripts Shell 優先、Python 採 PEP 723 inline metadata、pytest test_xxx.py
-- v2.9：多 Expert 安裝/卸載需求、install.sh --doctor、Python 版本檢查、Skill 與 Command 邊界釐清、限制補充（Skill 版本相容性、memory GC）、Future Work 補充（registry.json、Skill README 範本）
+- v2.9：多 Expert 安裝/卸載需求、 install.py --doctor、Python 版本檢查、Skill 與 Command 邊界釐清、限制補充（Skill 版本相容性、memory GC）、Future Work 補充（registry.json、Skill README 範本）
+- v3.0：架構重大重設計——install.sh 改為單一 install.py（stdlib only）、expert 資料夾移除 CLAUDE.md 和 install.sh、新增 soul.md / rules.md / duties.md / agents/ 資料夾、記憶改用 .connsys-expert/memory/、環境變數輸出至 .connsys-expert/.env、新增 symlink 靈活性設計原則（因應 agent 生態快速演進）
 
 > **注意**：文件中所列的 expert、skill 名稱均為**示例**，用於說明命名規則與架構設計。實際規劃以團隊討論為準。
 
@@ -42,7 +43,25 @@
 
 ---
 
-### 1.2 Consys Expert 的定義
+### 1.2 設計原則：Symlink 為核心的最大彈性
+
+**背景**：外部 Agent 框架（Claude Code、OpenClaw、ADK、gitagent 等）變化極快，無法等待生態穩定才開始設計。
+
+**採用 Symlink 安裝模式的理由**：
+
+| 優點 | 說明 |
+|------|------|
+| **即換即生效** | 更改 Expert 內容，下次 Claude 啟動即生效，不需重裝 |
+| **多版本共存** | 不同 Expert 可共用同一個 common skill，切換只需重新 link |
+| **零侵入性** | Workspace 的 `.claude/` 只有 symlink，不污染 expert repo |
+| **跨平台** | Linux/macOS 用 symlink；Windows 自動降級為 copy |
+| **框架遷移** | 換成 OpenClaw 或其他框架時，install.py 只需改寫 target 路徑 |
+
+> 參考：[open-gitagent/gitagent](https://github.com/open-gitagent/gitagent)（Expert folder 設計參考）
+
+---
+
+### 1.3 Consys Expert 的定義
 
 **Consys Expert = Agent 能力 + Consys Workflow + Consys Tool + Consys Knowledge**
 
@@ -68,7 +87,7 @@
 每個 Expert 可以：
 - 使用 **common** Workflow / Tool / Knowledge（所有 Expert 共用）
 - 擁有自己的**私有** Workflow / Tool / Knowledge
-- 在 install.sh 中透過 link 或 copy 將上述內容接入 Claude Code（或未來的其他 Agent 平台）
+- 透過 install.py 中的 link 或 copy 將上述內容接入 Claude Code（或未來的其他 Agent 平台）
 
 **開發範圍不限於韌體**，包含但不限於：
 - Firmware（韌體）
@@ -142,9 +161,9 @@
 | 獨立的 `connsys-experts` repo | Expert 工具與 source code 分開管理，兩者生命週期不同；同仁可在任何 workspace 安裝 |
 | 以 symlink 為預設安裝方式 | 切換 Expert 時直接重建 link 即可，無需處理檔案複製的一致性問題 |
 | CLAUDE.md 採覆蓋（替換）策略 | 切換 Expert 等於「換一個專家來做事」——新專家帶來全新的技能組合 |
-| install.sh 不觸碰 settings.json | 平台設定由 `setup-claude.sh` 處理，降低 install.sh 與平台的耦合 |
+| install.py 不觸碰 settings.json | 平台設定由 `setup-claude.sh` 處理，降低 install.py 與平台的耦合 |
 | 記憶系統用 Markdown + Git | 不需外部資料庫，完全透明可編輯，天然支援跨裝置同步與版本稽核 |
-| 工號（git username）作為後臺資料夾名稱 | 無需額外帳號系統，git 帳號即工號，install.sh 可自動取得 |
+| 工號（git username）作為後臺資料夾名稱 | 無需額外帳號系統，git 帳號即工號，install.py 可自動取得 |
 | `external/` 資料夾 | 避免重造輪子，整合社群優秀工具（如 skill-creator），以工具名稱為資料夾名 |
 | Human in the Loop 設計 | 對於有風險的操作（刪除、push、裝置控制），Agent 應先警告並等待人類確認，避免不可逆的錯誤 |
 
@@ -162,17 +181,17 @@
 1. 在 ~/workspace/ 執行：git clone {connsys-experts-url}
    → 出現 ~/workspace/connsys-experts/
 2. 瀏覽 connsys-experts/ 資料夾，找到所需 Expert（如 wifi/experts/wifi-build-expert/）
-3. 執行：source connsys-experts/wifi/experts/wifi-build-expert/install.sh
+3. 執行：uv run ./connsys-experts/install.py --init wifi/experts/wifi-build-expert/expert.json && source .connsys-expert/.env
    → 建立 .claude/ symlinks、生成 CLAUDE.md、設定環境變數
 4. 開啟 Claude Code → 已具備 wifi-build-expert 的 Skills/Hooks/Commands
 5. 與 Claude 互動，Claude 協助用 repo tool 下載 fw 到 codespace/fw/
 6. 需要切換到 wifi-cicd-expert 時：
-   source connsys-experts/wifi/experts/wifi-cicd-expert/install.sh --switch
+   uv run ./connsys-experts/install.py --init wifi/experts/wifi-cicd-expert/expert.json && source .connsys-expert/.env
    確認變更清單後，重新開啟 Claude Code
 ```
 
 **驗收條件**：
-- install.sh 執行後，`.claude/skills/`、`.claude/hooks/`、`.claude/commands/` 均正確建立 symlink
+- install.py 執行後，`.claude/skills/`、`.claude/hooks/`、`.claude/commands/` 均正確建立 symlink
 - `CLAUDE.md` 被生成，內容 @include `expert.md` 與 `expert.local.md`
 - 環境變數正確設定（見 FR-03）
 - `connsys-memory/` repo 被自動 clone，員工資料夾以 git username 命名
@@ -189,14 +208,14 @@
    ~/workspace/.repo
    ~/workspace/bora/wifi, bt, mcu, build, coexistence (各為獨立 git repo)
 2. 在 ~/workspace/ clone connsys-experts
-3. 執行 source connsys-experts/wifi/experts/wifi-build-expert/install.sh
-4. install.sh 自動偵測到 .repo 存在，判斷為 legacy 場景
+3. 執行 uv run ./connsys-experts/install.py --init wifi/experts/wifi-build-expert/expert.json && source .connsys-expert/.env
+4. install.py 自動偵測到 .repo 存在，判斷為 legacy 場景
 5. 建立 .claude/ symlinks，生成 CLAUDE.md
 6. 開啟 Claude Code，既有 code 與新安裝的 Expert 技能整合運作
 ```
 
 **驗收條件**：
-- install.sh 能自動偵測場景（legacy vs agent-first）
+- install.py 能自動偵測場景（legacy vs agent-first）
 - Legacy 場景的 `CONNSYS_EXPERTS_CODE_SPACE_PATH` 指向 workspace 根目錄
 - 不影響已存在的 bora/ 資料夾與 .repo
 
@@ -208,7 +227,7 @@
 
 **流程**：
 ```
-1. 執行 source connsys-experts/wifi/experts/wifi-cicd-expert/install.sh --switch
+1. 執行 uv run ./connsys-experts/install.py --init wifi/experts/wifi-cicd-expert/expert.json && source .connsys-expert/.env
 2. 系統先觸發 hand-off，儲存當前 session 狀態
 3. 移除舊 Expert 的所有 symlinks（common + private 全部替換）
 4. 建立新 Expert 的 symlinks
@@ -269,11 +288,11 @@
 connsys-experts/ (git)
 ├── README.md
 ├── registry.json                    ← 所有 Expert 目錄（expert-discovery 用）
-├── install.sh                       ← 頂層：設定環境變數、clone connsys-memory
+├── install.py                       ← 唯一安裝程式（設定環境變數、管理 symlink）
 │
 ├── framework/                       ← Layer 1：framework domain
 │   ├── experts/
-│   │   ├── framework-common-expert/ ← 跨所有 domain 共用（install.sh 無作用）
+│   │   ├── framework-common-expert/ ← 跨所有 domain 共用（is_common: true）
 │   │   │   ├── skills/              ← framework-expert-discovery-knowhow, framework-handoff-flow, framework-memory-tool
 │   │   │   ├── hooks/               ← session-start.sh, session-end.sh, pre-compact.sh（Shell 優先）
 │   │   │   │   └── memory-helper.py ← 複雜記憶操作（Python helper）
@@ -284,7 +303,7 @@ connsys-experts/ (git)
 │
 ├── wifi/                            ← Layer 1：wifi domain【示例】
 │   ├── experts/
-│   │   ├── wifi-common-expert/      ← wifi domain 共用（install.sh 無作用）
+│   │   ├── wifi-common-expert/      ← wifi domain 共用（is_common: true）
 │   │   ├── wifi-build-expert/
 │   │   ├── wifi-debug-expert/
 │   │   └── wifi-cicd-expert/
@@ -309,7 +328,7 @@ connsys-experts/ (git)
 ```
 {domain}-{name}-expert/
 ├── README.md      ← History、使用說明、人工安裝說明、Design、目的
-├── install.sh     ← 安裝腳本
+├── install.py     ← 唯一安裝程式（Python stdlib）
 ├── expert.json    ← Expert 設定（dependencies、transitions、human_in_the_loop）
 ├── CLAUDE.md      ← system prompt 模板
 ├── skills/        ← 每個 skill 含 SKILL.md / README.md / test/ / report/
@@ -335,12 +354,12 @@ workspace/
 └── connsys-experts/ (git)
 ```
 
-**Step 2 — `source connsys-experts/wifi/experts/wifi-build-expert/install.sh`**
+**Step 2 — `uv run ./connsys-experts/install.py --init wifi/experts/wifi-build-expert/expert.json`**
 ```
 workspace/                                       ← $CONNSYS_EXPERTS_WORKSPACE_ROOT_PATH
 ├── connsys-experts/ (git)
 │
-├── connsys-memory/ (git)                         ← install.sh 自動 clone
+├── connsys-memory/ (git)                         ← install.py 自動 clone
 │   └── employees/
 │       └── john.doe/                            ← git config user.name
 │           ├── sessions/
@@ -451,8 +470,8 @@ workspace/
 └── connsys-experts/ (git)
 ```
 
-**Step 2 — `source connsys-experts/wifi/experts/wifi-build-expert/install.sh`**
-（install.sh 偵測到根目錄有 `.repo`，自動判斷 legacy 場景）
+**Step 2 — `uv run ./connsys-experts/install.py --init wifi/experts/wifi-build-expert/expert.json`**
+（install.py 偵測到根目錄有 `.repo`，自動判斷 legacy 場景）
 ```
 workspace/                                       ← $CONNSYS_EXPERTS_WORKSPACE_ROOT_PATH
 │                                                   $CONNSYS_EXPERTS_CODE_SPACE_PATH（同一路徑）
@@ -510,36 +529,39 @@ workspace/                                       ← $CONNSYS_EXPERTS_WORKSPACE_
 | 編號 | 需求 | 優先級 | 理由 |
 |------|------|--------|------|
 | FR-01-1 | repo 命名為 `connsys-experts`，Expert 資料夾命名為 `experts/` | Must | 避免與 AI 的「agent」概念混淆，名稱更 general |
-| FR-01-2 | 每個 Expert 資料夾含 `expert.json`、`CLAUDE.md`、`install.sh`、`skills/`、`test/`、`report/`、`README.md` | Must | 標準化結構，讓 install.sh 可一致處理；test/ 和 report/ 支援品質追蹤 |
+| FR-01-2 | 每個 Expert 資料夾含 `expert.json`、`expert.md`、`soul.md`、`rules.md`、`duties.md`、`skills/`、`hooks/`、`agents/`、`commands/`（相容層）、`test/`、`report/`、`README.md`；**不含 `install.sh` 和 `CLAUDE.md`**（由頂層 `install.py` 統一管理） | Must | 標準化結構，Expert 資料夾只含內容；安裝管理集中在根目錄；新增 agents/ 支援 subagent 功能 |
 | FR-01-3 | `expert.json` 含名稱、描述、觸發詞、skills、transitions、dependencies | Must | 資訊越完整，expert-discovery 越有用 |
 | FR-01-4 | `framework-common-expert` 存放跨所有 domain 共用的 skills / hooks / commands；各 domain 的 `{domain}-common-expert` 存放該 domain 共用內容 | Must | 三層依賴（framework → domain → private）對應 Expert 定義的三個組件 |
 | FR-01-5 | `external/` 存放社群工具，以工具名稱為資料夾名（git submodule） | Should | 整合優質社群工具，避免重造輪子 |
+| FR-01-7 | Expert 資料夾新增 `agents/` 子資料夾，存放 Claude subagent 的 prompt 定義文件（`{agent-name}.md`） | Should | 支援 subagent 功能，可讓主 Expert 呼叫子任務 Agent（如 log 分析、文件查找）；參考 gitagent 設計 |
 | FR-01-6 | `registry.json` 列出所有 Expert 及其 metadata | Must | expert-discovery 的資料來源 |
 
-### FR-02：install.sh
+### FR-02：install.py（取代 install.sh）
+
+**核心原則**：單一 `connsys-experts/install.py` 負責所有安裝管理。Expert 資料夾本身不含安裝邏輯。
 
 | 編號 | 需求 | 優先級 | 理由 |
 |------|------|--------|------|
-| FR-02-1 | 支援 `--copy` 參數，預設為 symlink 模式 | Must | symlink 是切換 Expert 的基礎 |
-| FR-02-2 | 支援 `--uninstall` 參數，移除當前 Expert 的所有 links | Must | 切換 Expert 時需要先 uninstall |
-| FR-02-3 | 支援 `--switch` 參數（= uninstall + install + 印出 diff）| Must | 提升切換體驗，讓同仁看清楚技能組合的變化 |
-| FR-02-4 | 支援 `--target openclaw` 參數（未來） | Should | 為 OpenClaw 遷移預留入口 |
-| FR-02-5 | 支援 `--scenario [agent-first\|legacy]` 參數，預設自動偵測 | Must | 兩個場景的 code space 路徑不同 |
-| FR-02-6 | 支援 `--env-only` 參數，僅設定環境變數 | Should | 環境問題排查時不需重跑全部流程 |
-| FR-02-7 | install.sh **不**修改 `settings.json` / `settings.local.json` | Must | 平台設定由 `setup-claude.sh` 處理，解耦平台相依 |
-| FR-02-8 | install.sh **不**包含 MCP 設定 | Must | MCP 無法用 symlink 實作，屬不同層次的設定 |
-| FR-02-9 | 以 `source` 方式執行，環境變數可帶回 parent shell | Must | `./install.sh` 無法把環境變數帶回 parent shell |
-| FR-02-10 | 首次執行時自動 clone `connsys-memory` repo | Must | 後臺資料收集的基礎設施 |
-| FR-02-11 | 切換 Expert 時印出變更清單（新增/移除/保留的 skills） | Must | 讓同仁知道能力邊界已改變 |
-| FR-02-12 | Hook 實作語言優先順序：**Shell（預設）→ Python（複雜邏輯）→ JS（最後考慮）** | Must | Shell 在所有開發環境普遍存在，無需額外 runtime；Python 是韌體團隊的第二語言；JS 保留作為 OpenClaw 遷移的備用路徑 |
-| FR-02-13 | 支援**多個 Expert 同時安裝**：install.sh 必須管理 symlink 不衝突，若兩個 Expert 包含同名 skill/hook，後安裝者**不可覆蓋**已存在的 link，應警告並跳過 | Must | 解決多 Expert 共用 framework-common 等共用 Skill 時的 symlink 衝突問題 |
-| FR-02-14 | install.sh 支援 `--list` 參數，列出目前 `.claude/` 中所有已安裝的 skill symlink 及其來源 Expert | Must | 讓同仁隨時了解目前安裝了哪些 Expert 與 skill 組合 |
-| FR-02-15 | install.sh 支援 `--doctor` 參數：**診斷所有 skill symlink 是否正常**（target 是否存在、是否有 dangling link）、列出目前已安裝的所有 Expert、顯示多 Expert 的安裝狀態 | Must | 多 Expert 環境中，快速定位安裝問題、dangling symlink、版本不一致 |
-| FR-02-16 | install.sh 執行前自動檢查環境：system Python 版本、`uv` 是否安裝、`uvx` 是否可用，版本不符時輸出警告（不阻斷安裝，但提示） | Should | PEP 723 腳本需要 Python ≥ 3.11；`uv`/`uvx` 是執行 Python 腳本的推薦方式 |
+| FR-02-1 | `connsys-experts/install.py` 為**唯一安裝程式**，以 Python stdlib 實作，用 `uv run ./connsys-experts/install.py` 執行 | Must | 單一入口，避免每個 Expert 各自維護 install.sh；Python stdlib 無需額外依賴 |
+| FR-02-2 | 支援 `--init <expert.json>` 參數：**全新安裝**，清除所有既有 link，讀取 expert.json 及其 dependencies，重建所有 symlink，重新生成 CLAUDE.md 和 .env | Must | 初次安裝或強制重建時使用 |
+| FR-02-3 | 支援 `--add <expert.json>` 參數：**疊加安裝**，在既有 Expert 基礎上加入新的 Expert（清除後依完整 Expert 清單重建）| Must | 多 Expert 安裝流程 |
+| FR-02-4 | 支援 `--remove <expert.json>` 參數：從已安裝清單移除此 Expert，依剩餘 Expert 重建 symlink 和 CLAUDE.md | Must | 移除特定 Expert，不影響其他 Expert |
+| FR-02-5 | 支援 `--uninstall` 參數：清除所有 link 和 CLAUDE.md，但保留 `.connsys-expert/log/` 和 `.connsys-expert/memory/` | Must | 完全清除安裝，保留記憶 |
+| FR-02-6 | 支援 `--list` 參數：列出目前已安裝的 Expert 清單及所有 symlink 及來源 | Must | 讓同仁了解目前安裝狀態 |
+| FR-02-7 | 支援 `--doctor` 參數：診斷所有 symlink 是否 dangling、列出已安裝 Expert、檢查 Python/uv/uvx 環境 | Must | 快速排查安裝問題 |
+| FR-02-8 | install.py 讀取 `expert.json` 的 `dependencies`，**遞迴解析所有依賴的 expert.json**，計算出完整的 symlink 清單 | Must | 自動帶入依賴的 Expert 內容，不需手動逐一安裝 |
+| FR-02-9 | expert.json 支援 `exclude_symlink` 欄位，可指定不建立 symlink 的 skills / hooks / agents 清單 | Must | 讓 Expert 可選擇性排除不需要的共用 link |
+| FR-02-10 | install.py 執行後將環境變數寫入 `workspace/.connsys-expert/.env`；同仁需手動執行 `source .connsys-expert/.env` | Must | 環境變數需存入 shell，Python 程式本身無法修改 parent shell 環境 |
+| FR-02-11 | install.py 每次執行結束後自動印出提示訊息：`✅ 安裝完成。請執行：source .connsys-expert/.env` | Must | 避免同仁忘記 source，導致環境變數失效 |
+| FR-02-12 | install.py **不**修改 `settings.json` / `settings.local.json`（由 `setup-claude.sh` 處理）| Must | 解耦平台相依 |
+| FR-02-13 | install.py **不**包含 MCP 設定 | Must | MCP 屬不同層次的設定 |
+| FR-02-14 | install.py 安裝前自動檢查：system Python 版本、`uv` 是否安裝、`uvx` 是否可用；版本不符輸出警告（不阻斷）| Should | PEP 723 腳本需要 Python ≥ 3.11 |
+| FR-02-15 | Windows 環境下 symlink 不可用時，install.py 自動降級為 **copy 模式**（功能相同，但更新 expert 內容後需重新執行）| Should | 跨平台支援 |
+| FR-02-16 | Hook 實作語言優先順序：**Shell（預設）→ Python（複雜邏輯）→ JS（最後考慮）**；Python 腳本採 PEP 723 | Must | 一致的語言策略，Shell 無需額外 runtime |
 
 ### FR-03：環境變數
 
-所有環境變數由 install.sh 透過 `source` 設定，可供 Expert 的 workflow、skill、tool 直接使用。
+所有環境變數由 install.py 寫入 `workspace/.connsys-expert/.env`，同仁執行 `source .connsys-expert/.env` 後即可在 skill、hook、agent 中使用。
 **所有變數統一使用 `CONNSYS_EXPERTS_` 前綴**。
 
 | 環境變數 | 說明 | Agent First 範例值 | Legacy 範例值 |
@@ -547,7 +569,7 @@ workspace/                                       ← $CONNSYS_EXPERTS_WORKSPACE_
 | `CONNSYS_EXPERTS_PATH` | `connsys-experts` repo 的路徑 | `~/workspace/connsys-experts` | `~/workspace/connsys-experts` |
 | `CONNSYS_EXPERTS_WORKSPACE_ROOT_PATH` | 工作根目錄（`.claude/` 所在）| `~/workspace` | `~/workspace` |
 | `CONNSYS_EXPERTS_CODE_SPACE_PATH` | 程式碼路徑（source code repo 所在）| `~/workspace/codespace` | `~/workspace` |
-| `CONNSYS_EXPERTS_MEMORY_PATH` | `connsys-memory` repo 的路徑 | `~/workspace/connsys-memory` | `~/workspace/connsys-memory` |
+| `CONNSYS_EXPERTS_MEMORY_PATH` | local memory 路徑 | `~/workspace/.connsys-expert/memory` | `~/workspace/.connsys-expert/memory` |
 | `CONNSYS_EXPERTS_EMPLOYEE_ID` | 員工工號（自動從 `git config user.name` 取得）| `john.doe` | `john.doe` |
 
 **使用範例**（在 skill 或 hook 中）：
@@ -567,7 +589,7 @@ git -C "$CONNSYS_EXPERTS_MEMORY_PATH" push origin main
 | FR-04-2 | `expert-discovery` skill 列出所有 Expert 及能力 | Must | 基本的系統可發現性 |
 | FR-04-3 | `handoff-protocol` skill 定義交接格式與流程 | Must | 所有 Expert 都需要知道如何交接 |
 | FR-04-4 | Expert 可有私有 skills，切換時一併替換 | Must | 不同專家有不同的知識庫 |
-| FR-04-5 | External skills 透過 registry 聲明，install.sh 自動建立 link | Should | 整合社群工具 |
+| FR-04-5 | External skills 透過 registry 聲明，install.py 自動建立 link | Should | 整合社群工具 |
 | FR-04-6 | 每個 Skill 資料夾除 `SKILL.md` 外，還需含 `README.md`、`test/`、`report/` | Must | 統一 Skill 資料夾標準，支援測試驗證與執行記錄 |
 | FR-04-7 | Skill `README.md` 記錄：History、使用說明、人工安裝說明、Design、目的；開發說明亦可寫於此（如何新增 case、測試覆蓋率目標、已知問題）。Skill README 範本與最佳實踐詳見 Future Work FW-03 | Must | 讓維護者了解 skill 的脈絡與演進，開發者不需另開文件 |
 | FR-04-8 | Skill `test/` 以 **Shell 腳本（`test-basic.sh`）為主**；需 Python 時使用 pytest，測試檔命名 `test_xxx.py` | Must | Shell 腳本覆蓋基本驗證；pytest 負責結構化 unit test，CI 可自動執行 |
@@ -579,13 +601,14 @@ git -C "$CONNSYS_EXPERTS_MEMORY_PATH" push origin main
 
 ### FR-05：CLAUDE.md 生成機制
 
-| 編號 | 需求 | 優先級 |
-|------|------|--------|
-| FR-05-1 | install.sh 在 workspace 根目錄生成 `CLAUDE.md`（非 symlink） | Must |
-| FR-05-2 | CLAUDE.md @include `.claude/expert.md`（由 expert.json 生成） | Must |
-| FR-05-3 | CLAUDE.md @include `.claude/expert.local.md`（若存在） | Must |
-| FR-05-4 | `expert.local.md` 不納入 `connsys-experts` repo，以 `.gitignore` 排除 | Must |
-| FR-05-5 | `expert.md` 中說明 `expert.local.md` 的存在與用途 | Should |
+| 編號 | 需求 | 優先級 | 理由 |
+|------|------|--------|------|
+| FR-05-1 | install.py 在 workspace 根目錄生成 `CLAUDE.md`（非 symlink） | Must | CLAUDE.md 是動態生成的，不放在 expert 資料夾中 |
+| FR-05-2 | 安裝單個 Expert 時，CLAUDE.md 以 `@include` 讀取該 Expert 資料夾的 `expert.md`、`soul.md`、`rules.md`、`duties.md` | Must | 直接引用 expert 資料夾的檔案，更新 expert 後不需重裝即可生效 |
+| FR-05-3 | 安裝多個 Expert 時，以**最後安裝的 Expert** 的 `soul.md`、`rules.md`、`duties.md` 為主 identity；所有已安裝 Expert 的 `expert.md` 均 @include | Must | 多 Expert 環境有清楚的 identity 主從關係 |
+| FR-05-4 | CLAUDE.md 末尾 `@include CLAUDE.local.md`（若不存在，Claude Code 忽略） | Must | 個人客製化入口 |
+| FR-05-5 | `CLAUDE.local.md` 不納入 `connsys-experts` repo，以 `.gitignore` 排除 | Must | 個人設定不進 repo |
+| FR-05-6 | Expert 資料夾**不含** `CLAUDE.md`（由 install.py 在 workspace 根目錄生成） | Must | 避免混淆：expert 資料夾只含內容，workspace root 的 CLAUDE.md 才是生效的 |
 
 ### FR-06：記憶系統（Workflow + 後臺）
 
@@ -602,13 +625,13 @@ git -C "$CONNSYS_EXPERTS_MEMORY_PATH" push origin main
 
 #### FR-06B：本地三區記憶（Local Three-Zone Memory）
 
-本地記憶存放於 `workspace/.claude/memory/`，分三個用途不同的區域，與遠端 `connsys-memory` 後臺各司其職：
+本地記憶存放於 `workspace/.connsys-expert/memory/`，以 expert 名稱和日期分資料夾。session-stop hook 負責上傳至遠端 `connsys-memory` repo（git push）：
 
 | 編號 | 需求 | 優先級 | 理由 |
 |------|------|--------|------|
-| FR-06-7 | 建立 `memory/shared/` 區域（跨 Expert 共用知識） | Must | 儲存 project.md、conventions.md 等跨 Expert 都需要的知識，Expert 切換後仍可讀取 |
-| FR-06-8 | 建立 `memory/working/{expert}/` 區域（當前 Expert 的飛行中狀態） | Must | 儲存 in-flight 的工作日誌、決策記錄，Expert 切換時由 hand-off hook 清除（或歸檔），避免記憶污染 |
-| FR-06-9 | 建立 `memory/handoffs/{run-id}/` 區域（交接文件，寫入後唯讀）。**`run-id` 應使用 Claude Session ID**（由環境變數或 hook context 取得），確保同一人開多個 Claude 視窗時不衝突；若無法取得 Session ID，fallback 為 `{timestamp}-{random}` | Must | 壓縮摘要 < 2000 tokens，新 Expert 由 session-start hook 讀取，確保交接資訊完整傳遞；用 Session ID 作 run-id 可避免同一人同時開多個 Claude 時產生衝突 |
+| FR-06-7 | 建立 `.connsys-expert/memory/shared/` 區域（跨 Expert 共用知識） | Must | 儲存 project.md、conventions.md 等跨 Expert 都需要的知識，Expert 切換後仍可讀取 |
+| FR-06-8 | 建立 `.connsys-expert/memory/{expert-name}/{date}/` 區域（當前 Expert 的飛行中狀態），命名格式：`{HH:MM}-{expert-name}-memory.md` | Must | 以日期和時間戳命名，方便回溯；Expert 切換時歸檔 |
+| FR-06-9 | 建立 `.connsys-expert/memory/handoffs/{run-id}/` 區域（交接文件，寫入後唯讀）。**`run-id` 應使用 Claude Session ID**（由環境變數或 hook context 取得）；fallback 為 `{timestamp}-{random}` | Must | Session ID 作 run-id，同一人多視窗不衝突；handoff 文件 < 2000 tokens，新 Expert 由 session-start hook 讀取 |
 | FR-06-10 | `session-start` hook 自動偵測 `memory/handoffs/` 是否有待接的 hand-off 文件 | Must | 新 Expert 啟動時不需人工操作即可拿到上一個 Expert 的交接內容 |
 | FR-06-11 | 週期性記憶整理（Periodic Collection）：每日或每週自動彙整本地記憶至 connsys-memory | Should | 收集長期知識，供未來 framework-learn-expert 分析，但不造成即時系統負擔 |
 
@@ -623,7 +646,7 @@ git -C "$CONNSYS_EXPERTS_MEMORY_PATH" push origin main
 | FR-07-5 | `expert.json` 的 `transitions` 欄位定義 Expert 的狀態機轉移（事件 → 下一個 Expert） | Must |
 | FR-07-6 | 轉移事件（如 BUILD_SUCCESS / BUILD_FAILED）由 Expert 在工作完成後主動發出，觸發 hand-off 流程 | Must |
 | FR-07-7 | 若轉移目標為 `null`（如 BUILD_FAILED），表示需要人工介入，Expert 應提示同仁並等待 | Must |
-| FR-07-8 | Stage 2 未來：符合條件的 transitions 可自動觸發 install.sh --switch，無需人工操作 | Future |
+| FR-07-8 | Stage 2 未來：符合條件的 transitions 可自動觸發 install.py --init，無需人工操作 | Future |
 
 ### FR-08：後臺資料收集
 
@@ -650,7 +673,7 @@ git -C "$CONNSYS_EXPERTS_MEMORY_PATH" push origin main
 | 類別 | 需求 | 理由 |
 |------|------|------|
 | **可遷移性** | Skill 格式相容 OpenClaw；Hook 以 Shell/Python 實作（平台無關），未來遷移 OpenClaw 時改為 TypeScript | 不綁定特定平台是核心設計目標 |
-| **可擴充性** | 新增 Expert 只需新增資料夾 + expert.json + install.sh，不修改其他 Expert | 降低同仁貢獻新 Expert 的門檻 |
+| **可擴充性** | 新增 Expert 只需新增資料夾 + expert.json，不修改其他 Expert | 降低同仁貢獻新 Expert 的門檻 |
 | **可稽核性** | Hand-off 與 session 記憶均透過 Git 保存，支援 diff 與歷史查詢 | 後臺分析與問題溯源的基礎 |
 | **Context 效率** | Hand-off 摘要 < 2000 tokens | 避免新 Expert 開始時就面臨 context 爆炸 |
 | **相容性** | 完全運行於 Claude Code CLI，不依賴外部服務或資料庫 | 降低部署複雜度 |
@@ -662,9 +685,9 @@ git -C "$CONNSYS_EXPERTS_MEMORY_PATH" push origin main
 
 ### 限制
 
-- 本期 install.sh 僅處理 symlink/copy，不觸碰 `settings.json`（由 `setup-claude.sh` 處理）
-- MCP 設定不在 install.sh 範圍內
-- Symlink 在 Windows 環境需要額外處理（本期不支援）
+- install.py 僅處理 symlink/copy，不觸碰 `settings.json`（由 `setup-claude.sh` 處理）
+- MCP 設定不在 install.py 範圍內
+- Symlink 在 Windows 環境下：install.py 自動偵測並降級為 copy 模式（FR-02-15），功能相同，但更新 expert 內容後需重新執行 install.py
 - `connsys-memory` repo 的 push 需要同仁對 remote 有寫入權限
 - Human in the Loop 功能為未來規劃，本期以人工切換 Expert 為主
 - **Skill 版本向後相容性**：SKILL.md frontmatter 的 `version` 欄位目前僅供顯示，尚未定義 Skill 升版後舊 hand-off 文件的相容性規則；Skill 的 breaking change 需人工審查
@@ -683,14 +706,14 @@ git -C "$CONNSYS_EXPERTS_MEMORY_PATH" push origin main
 
 ```
 Phase 1：Claude Code（現在）
-  install.sh symlink → .claude/skills（Knowledge）, hooks（Workflow）, commands（Tool）
+  install.py symlink → .claude/skills（Knowledge）, hooks（Workflow）, commands（Tool）
   CLAUDE.md 生成機制
   connsys-memory Git 後臺收集
   Hooks 以 Shell 實作（複雜邏輯用 Python）
   Human in the Loop：人工切換 Expert
 
 Phase 2：OpenClaw
-  install.sh --target openclaw
+  install.py --target openclaw
   SKILL.md 直接相容
   Shell/Python hooks → TypeScript handler.ts（此階段重寫 hooks）
   connsys-memory → workspace/MEMORY.md + LanceDB
@@ -713,14 +736,14 @@ Phase 3：ADK/SDK（全自動）
 | Harness Engineering | 為 AI 打造「自動化治理體系」，透過限制行為邊界與豐富上下文，實現大規模自動化（來源：Birgitta Böckeler / Martin Fowler Blog）|
 | connsys-experts | 團隊共同維護的 Expert 工具 repo |
 | connsys-memory | 後臺資料收集 repo，以員工工號（git username）為子資料夾 |
-| install.sh | 安裝腳本，建立 symlinks，生成 CLAUDE.md，設定環境變數 |
+|  install.py | 安裝腳本，建立 symlinks，生成 CLAUDE.md，設定環境變數 |
 | Agent First | 從空白 workspace 開始，由 Expert 引導下載 code 的場景 |
 | Legacy | 同仁已手動下載 code，後續引入 Expert 的場景 |
 | codespace | Agent First 場景下，Expert 引導下載的 source code 集中目錄 |
 | Hand-off | Expert 切換或 session 結束時產生的結構化上下文摘要文件 |
 | common/ | 所有 Expert 共用的 skills/hooks/commands |
 | external/ | 整合的社群優質工具，以工具名稱為資料夾名 |
-| expert.md | 由 install.sh 從 expert.json 生成的可讀 Markdown |
+| expert.md | 由  install.py 從 expert.json 生成的可讀 Markdown |
 | expert.local.md | 使用者個人客製化檔，不納入 connsys-experts repo |
 | Human in the Loop | 對高風險操作暫停等待人類確認的機制 |
 | `CONNSYS_EXPERTS_PATH` | 指向 connsys-experts repo 的環境變數 |
