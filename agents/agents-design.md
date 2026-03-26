@@ -665,19 +665,9 @@ install.py 讀取 `expert.json` 的 `dependencies` + `internal`，依序在 work
 ├── commands/
 │   ├── framework-experts-tool    → .../framework-base-expert/commands/framework-experts-tool/
 │   └── framework-handoff-tool    → .../framework-base-expert/commands/framework-handoff-tool/
-│
-└── memory/                                 ← 本地三區記憶（install.sh 首次執行時建立）
-    ├── shared/                             ← Zone 1：跨 Expert 持久共用知識
-    │   ├── project.md
-    │   ├── conventions.md
-    │   └── decisions.md
-    ├── working/                            ← Zone 2：當前 Expert 飛行中狀態（切換時清除）
-    │   └── wifi-bora-memory-slim-expert/
-    │       └── working.md
-    └── handoffs/                           ← Zone 3：交接文件（寫入後唯讀）
-        └── {run-id}/
-            └── handoff.md
 ```
+
+> 本地三區記憶（shared / working / handoffs）存放於 `.connsys-jarvis/memory/`，詳見 §5.3 與 §10.3。
 
 ### 5.3 .connsys-jarvis/ 隱藏資料夾設計
 
@@ -1080,7 +1070,7 @@ install.py 在 `$CONNSYS_JARVIS_WORKSPACE_ROOT_PATH`（workspace 根目錄）生
 複雜邏輯（JSON 解析、記憶壓縮）：呼叫 memory-helper.py
 ```
 
-Hooks 設定於 project level（`workspace/.claude/settings.json`），由 `setup-claude.sh` 負責寫入，**不由 install.sh 處理**。
+Hooks 設定於 project level（`workspace/.claude/settings.json`），由 `install.py` 在 `--init` / `--add` 時寫入。
 
 ### 10.2 connsys-memory Repo 結構（後臺遠端）
 
@@ -1295,7 +1285,7 @@ expert.json（以 wifi-bora-memory-slim-expert 為例）：
 # session-start.sh
 # Claude Code hook：session 開始時載入交接文件與共用記憶
 
-MEMORY_DIR="${CONNSYS_JARVIS_WORKSPACE_ROOT_PATH}/.claude/memory"
+MEMORY_DIR="${CONNSYS_JARVIS_WORKSPACE_ROOT_PATH}/.connsys-jarvis/memory"
 HANDOFFS_DIR="${MEMORY_DIR}/handoffs"
 SHARED_DIR="${MEMORY_DIR}/shared"
 
